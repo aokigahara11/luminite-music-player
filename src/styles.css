@@ -18,27 +18,67 @@ html, body {
   height: 100%;
 }
 
-/* ==== Вверхняя шапка ==== */
+/* ==== Общие компоненты ==== */
 
-.top-panel {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 14px 25px;
-  z-index: 100;
-
-  display: flex;
-  align-items: center;
-
-  animation: slideDown 0.6s ease-out;
-
-  background: rgba(15, 15, 15, 0.95);
-  backdrop-filter: blur(10px);
-  border-bottom: 0.5px solid rgba(255, 255, 255, 0.05);
+.icon-svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
 }
 
-/* ==== Шапка приложения ==== */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  
+  background: linear-gradient(
+    to right, 
+    #ffffff 0%, 
+    #ffffff var(--progress, 0%), 
+    rgba(255, 255, 255, 0.15) var(--progress, 0%), 
+    rgba(255, 255, 255, 0.15) 100%
+  );
+  
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+input[type="range"]:hover {
+  background: linear-gradient(
+    to right, 
+    #ffffff 0%, 
+    #ffffff var(--progress, 0%), 
+    rgba(255, 255, 255, 0.3) var(--progress, 0%), 
+    rgba(255, 255, 255, 0.3) 100%
+  );
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
+}
+
+.view-section {
+  display: none;
+}
+
+.view-section.active {
+  display: block;
+}
+
+/* ==== Вверхняя шапка ==== */
 
 .app-title {
   font-size: 18px;
@@ -118,57 +158,6 @@ html, body {
   color: #ffffff;
 }
 
-/* ==== Общие компоненты ==== */
-
-.icon-svg {
-  width: 18px;
-  height: 18px;
-  display: block;
-  flex-shrink: 0;
-}
-
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  
-  background: linear-gradient(
-    to right, 
-    #ffffff 0%, 
-    #ffffff var(--progress, 0%), 
-    rgba(255, 255, 255, 0.15) var(--progress, 0%), 
-    rgba(255, 255, 255, 0.15) 100%
-  );
-  
-  border-radius: 0;
-  outline: none;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-input[type="range"]:hover {
-  background: linear-gradient(
-    to right, 
-    #ffffff 0%, 
-    #ffffff var(--progress, 0%), 
-    rgba(255, 255, 255, 0.3) var(--progress, 0%), 
-    rgba(255, 255, 255, 0.3) 100%
-  );
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  background: #ffffff;
-  border-radius: 50%;
-  border: none;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
-}
 
 /* ==== Плеер-бар ==== */
 
@@ -265,6 +254,29 @@ input[type="range"]::-webkit-slider-thumb {
   
   user-select: none;
   min-width: 32px;
+}
+
+#add-btn .icon-check {
+  display: none;
+  color: #4caf50;
+}
+
+#add-btn.added .icon-plus {
+  display: none;
+}
+
+#add-btn.added .icon-check {
+  display: block;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.icon-animating {
+  animation: pop-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .player-center {
@@ -458,7 +470,6 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 32px;
 }
 
-/* Стилизация скроллбара */
 .main-content::-webkit-scrollbar {
   width: 6px;
 }
@@ -468,7 +479,6 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 3px;
 }
 
-/* Заголовки */
 .section-title {
   font-size: 28px;
   font-weight: 700;
@@ -481,7 +491,6 @@ input[type="range"]::-webkit-slider-thumb {
   margin-bottom: 16px;
 }
 
-/* Сетка быстрой панели */
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -661,7 +670,7 @@ input[type="range"]::-webkit-slider-thumb {
 .sidebar-left .btn-ctrl:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  transform: none; /* Отменяем масштабирование плеера */
+  transform: none;
 }
 
 
@@ -674,4 +683,94 @@ input[type="range"]::-webkit-slider-thumb {
   width: 20px;
   height: 20px;
 }
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  margin-top: 16px;
+}
+
+.empty-state .empty-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.empty-state .empty-icon .icon-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.empty-state p {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 20px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#playlist-name-input {
+  text-align: left;
+  padding-left: 12px;
+  box-sizing: border-box;
+}
+
 

@@ -32,7 +32,7 @@
      
           <div class="sidebar-controls">
             <!-- Главная -->
-            <button class="btn-ctrl" id="main-btn" title="Главная">
+            <button class="btn-ctrl active" id="main-btn" title="Главная">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9 22 9 12 15 12 15 22"></polyline>
@@ -68,8 +68,11 @@
 
       <!-- Центральная область контента -->
       <main class="main-content">
-        <section class="welcome-section">
+
+        <!-- Секция: Главная -->
+        <section class="welcome-section view-section active" id="view-main">
           <h2 class="section-title">Главная</h2>
+
           <div class="quick-actions">
             <button class="action-card" id="scan-media-btn">
               <div class="action-icon">
@@ -85,11 +88,30 @@
               </div>
             </button>
 
+            <button class="action-card" id="add-track-btn">
+              <div class="action-icon">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                  <line x1="12" y1="9" x2="18" y2="8"></line>
+                </svg>
+              </div>
+              <div class="action-info">
+                <h3>Добавить трек</h3>
+                <p>Загрузить файл в медиатеку</p>
+              </div>
+            </button>
+
             <button class="action-card" id="create-playlist-btn">
               <div class="action-icon">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="8" y1="6" x2="21" y2="6"></line>
+                  <line x1="8" y1="12" x2="21" y2="12"></line>
+                  <line x1="8" y1="18" x2="21" y2="18"></line>
+                  <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                  <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                  <line x1="3" y1="18" x2="3.01" y2="18"></line>
                 </svg>
               </div>
               <div class="action-info">
@@ -98,27 +120,107 @@
               </div>
             </button>
           </div>
-        </section>
-
-        <section class="content-section">
-          <div class="section-header">
-            <h3 class="section-subtitle">Недавно прослушано</h3>
-          </div>
-          <div class="cards-grid">
-            <div class="media-card">
-              <div class="card-cover-wrapper">
-                <img src="./src/assets/dekma.jpeg" alt="Cover" class="card-cover" />
-                <button class="card-play-btn">
-                  <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
-                    <polygon points="6,4 20,12 6,20" />
-                  </svg>
-                </button>
+          
+          <div class="content-section" style="margin-top: 32px;">
+            <!-- Недавно прослушано -->
+            <div class="section-header">
+              <h3 class="section-subtitle">Недавно прослушано</h3>
+            </div>
+            <div class="cards-grid">
+              <div class="media-card">
+                <div class="card-cover-wrapper">
+                  <img src="./src/assets/dekma.jpeg" alt="Cover" class="card-cover" />
+                  <button class="card-play-btn">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6,4 20,12 6,20" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="card-title">ПОНЯТЬ</div>
+                <div class="card-artist">ВУЛЬФ, dekma</div>
               </div>
-              <div class="card-title">ПОНЯТЬ</div>
-              <div class="card-artist">ВУЛЬФ, dekma</div>
+            </div>
+
+            <!-- Плейлисты -->
+            <div class="section-header" style="margin-top: 32px;">
+              <h3 class="section-subtitle">Плейлисты</h3>
+            </div>
+            
+            <div class="cards-grid">
+              <!-- Карточка Медиатеки -->
+              <div class="media-card">
+                <div class="card-cover-wrapper">
+                  <img src="./src/assets/media_library.jpg" alt="Медиатека" class="card-cover" />
+                  <button class="card-play-btn">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6,4 20,12 6,20" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="card-title">Медиатека</div>
+                <div class="card-artist">Все треки</div>
+              </div>
             </div>
           </div>
         </section>
+
+        <!-- Секция: Медиатека -->
+        <section class="media-section view-section" id="view-media-library">
+          <h2 class="section-title">Медиатека</h2>
+
+          <div class="empty-state" id="media-empty-state">
+            <div class="empty-icon">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+            <h3>Ваша медиатека пуста</h3>
+            <p>Добавьте локальные треки</p>
+            <button class="action-card" id="empty-scan-btn" style="justify-content: center; width: auto; padding: 10px 20px; gap: 8px;">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Добавить трек</span>
+            </button>
+          </div>
+
+          <div class="cards-grid">
+            <!-- Карточки медиафайлов -->
+          </div>
+        </section>
+
+        <!-- Секция: Плейлисты -->
+        <section class="playlists-section view-section" id="view-playlists">
+          <h2 class="section-title">Плейлисты</h2>
+          <div class="empty-state" id="playlists-empty-state">
+            <div class="empty-icon">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </div>
+
+            <h3>У вас пока нет плейлистов</h3>
+            <p>Создайте свой первый плейлист, чтобы сгруппировать любимые треки</p>
+            <button class="action-card" id="empty-create-playlist-btn" style="justify-content: center; width: auto; padding: 10px 20px; gap: 8px;">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Создать плейлист</span>
+            </button>
+          </div>
+
+          <div class="cards-grid">
+            <!-- Карточки плейлистов -->
+          </div>
+        </section>
+
       </main>
 
       <!-- Боковая панель с информацией (справа) -->
@@ -137,7 +239,7 @@
         </div>
       </aside>
 
-      <!-- Нижнее окно -->
+      <!-- Нижнее окно / Плеер-бар -->
       <div class="player-bar">
         <!-- Информация о треке -->
         <div class="track-info">
@@ -147,6 +249,21 @@
           <div class="track-text">
             <div class="track-title">ПОНЯТЬ</div>
             <div class="track-artist">ВУЛЬФ, dekma</div>
+          </div>
+          
+          <div class="track-actions">
+            <!-- Добавить/удалить из медиатеки (+ / галочка) -->
+            <button class="btn-ctrl" id="add-btn" title="Добавить в медиатеку">
+              <svg class="icon-svg icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="16"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+              </svg>
+
+              <svg class="icon-svg icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -196,8 +313,24 @@
           <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="80" />
         </div>
       </div>
-    </div>
+    
+      <!-- Модальное окно создания плейлиста -->
+      <div class="modal-overlay hidden" id="create-playlist-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Новый плейлист</h3>
+            <button class="btn-ctrl" id="close-modal-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <input type="text" id="playlist-name-input" class="search-input" placeholder="Название плейлиста" style="border-radius: 8px;" />
+          </div>
+          <div class="modal-footer">
+            <button class="action-card" id="submit-playlist-btn" style="justify-content: center; width: 100%;">Создать</button>
+          </div>
+        </div>
+      </div>
 
+    </div>
     <script type="module" src="src/main.ts"></script>
   </body>
 </html>
