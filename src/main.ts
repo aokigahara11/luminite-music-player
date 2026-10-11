@@ -2,6 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 type PlaylistCategory = "EP" | "Альбом" | "Плейлист";
+type CoverKind = "track" | "playlist";
 
 interface Track {
     id: string;
@@ -18,6 +19,14 @@ interface Playlist {
     title: string;
     category: PlaylistCategory;
     trackIds: string[];
+    cover?: string;
+}
+
+interface StoredCover {
+    id: string;
+    kind: CoverKind;
+    entity_id: string;
+    path_file: string;
 }
 
 interface StoredTrack {
@@ -65,6 +74,8 @@ const state: AppState = {
 const audio = new Audio();
 let pendingRestore: PlayerConfig | null = null;
 let playerSaveQueue: Promise<void> = Promise.resolve();
+let toastTimer: number | undefined;
+let toastHideTimer: number | undefined;
 
 function mapStoredTrack(track: StoredTrack): Track {
     return {
@@ -80,6 +91,13 @@ function mapStoredPlaylist(playlist: StoredPlaylist): Playlist {
         title: playlist.name,
         category: playlist.category || "Плейлист",
         trackIds: playlist.id_tracks,
+    };
+}
+
+function mapStoredCover(cover: StoredCover) {
+    return {
+        ...cover,
+        src: convertFileSrc(cover.path_file),
     };
 }
 
@@ -102,13 +120,25 @@ function savePlayerConfig() {
 }
 
 async function loadSavedData() {
-    const [tracks, playlists, playerConfig] = await Promise.all([
+    const [tracks, playlists, covers, playerConfig] = await Promise.all([
         invoke<StoredTrack[]>("get_library"),
         invoke<StoredPlaylist[]>("get_playlists"),
+        invoke<StoredCover[]>("get_covers"),
         invoke<PlayerConfig>("get_player_config"),
     ]);
     state.tracks = tracks.map(mapStoredTrack);
     state.playlists = playlists.map(mapStoredPlaylist);
+
+    covers.forEach((cover) => {
+        const coverSrc = mapStoredCover(cover).src;
+        if (cover.kind === "track") {
+            const track = state.tracks.find((item) => item.id === cover.entity_id);
+            if (track) track.cover = coverSrc;
+        } else {
+            const playlist = state.playlists.find((item) => item.id === cover.entity_id);
+            if (playlist) playlist.cover = coverSrc;
+        }
+    });
 
     audio.volume = playerConfig.volume;
     elements.volumeSlider.value = Math.round(playerConfig.volume * 100).toString();
@@ -125,6 +155,32 @@ async function loadSavedData() {
 
     renderMediaLibrary();
     renderPlaylists();
+}
+
+async function changeCover(kind: CoverKind, entityId: string) {
+    const filePath = await open({
+        multiple: false,
+        filters: [{ name: "Изображения", extensions: ["jpg", "jpeg", "png", "webp"] }],
+    });
+    if (typeof filePath !== "string") return;
+
+    const storedCover = await invoke<StoredCover>("set_cover", { kind, entityId, filePath });
+    const coverSrc = mapStoredCover(storedCover).src;
+
+    if (kind === "track") {
+        const track = state.tracks.find((item) => item.id === entityId);
+        if (!track) return;
+        track.cover = coverSrc;
+        if (state.currentTrackId === entityId) updateTrackMetadata(track);
+    } else {
+        const playlist = state.playlists.find((item) => item.id === entityId);
+        if (!playlist) return;
+        playlist.cover = coverSrc;
+        renderPlaylists();
+        renderPlaylistDetail();
+    }
+
+    showToast("Обложка сохранена");
 }
 
 const elements = {
@@ -159,6 +215,7 @@ const elements = {
     playlistDetailCount: document.getElementById("playlist-detail-count") as HTMLElement,
     editPlaylistBtn: document.getElementById("edit-playlist-btn") as HTMLButtonElement,
     deletePlaylistBtn: document.getElementById("delete-playlist-btn") as HTMLButtonElement,
+    changePlaylistCoverBtn: document.getElementById("change-playlist-cover-btn") as HTMLButtonElement,
     playlistBackBtn: document.getElementById("playlist-back-btn") as HTMLButtonElement,
 
     // Плеер-бар
@@ -168,6 +225,8 @@ const elements = {
     sidebarTitle: document.getElementById("sidebar-title") as HTMLElement,
     sidebarArtist: document.getElementById("sidebar-artist") as HTMLElement,
     sidebarCover: document.getElementById("sidebar-cover") as HTMLImageElement,
+    sidebarCoverWrapper: document.querySelector(".sidebar-cover-wrapper") as HTMLElement,
+    changeTrackCoverBtn: document.getElementById("change-track-cover-btn") as HTMLButtonElement,
     editTrackBtn: document.getElementById("edit-track-btn") as HTMLButtonElement,
     trackEditForm: document.getElementById("track-edit-form") as HTMLFormElement,
     trackTitleInput: document.getElementById("track-title-input") as HTMLInputElement,
@@ -175,6 +234,9 @@ const elements = {
     saveTrackEditBtn: document.getElementById("save-track-edit-btn") as HTMLButtonElement,
     cancelTrackEditBtn: document.getElementById("cancel-track-edit-btn") as HTMLButtonElement,
     trackEditStatus: document.getElementById("track-edit-status") as HTMLElement,
+    appToast: document.getElementById("app-toast") as HTMLElement,
+    appToastMessage: document.getElementById("app-toast-message") as HTMLElement,
+    appToastIcon: document.querySelector("#app-toast .app-toast-icon") as SVGElement,
     playBtn: document.getElementById("play-btn") as HTMLButtonElement,
     prevBtn: document.getElementById("prev-btn") as HTMLButtonElement,
     nextBtn: document.getElementById("next-btn") as HTMLButtonElement,
@@ -204,6 +266,26 @@ const elements = {
     searchDropdown: document.getElementById("search-dropdown") as HTMLElement,
     searchResultsList: document.getElementById("search-results-list") as HTMLElement,
 };
+
+function showToast(message: string, isError = false) {
+    window.clearTimeout(toastTimer);
+    window.clearTimeout(toastHideTimer);
+    elements.appToast.hidden = false;
+    elements.appToast.classList.remove("is-visible");
+    elements.appToast.classList.toggle("is-error", isError);
+    elements.appToastMessage.textContent = message;
+    elements.appToastIcon.innerHTML = isError
+        ? `<circle cx="12" cy="12" r="9"></circle><path d="m9 9 6 6m0-6-6 6"></path>`
+        : `<circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.5 2.5L16 9"></path>`;
+
+    requestAnimationFrame(() => elements.appToast.classList.add("is-visible"));
+    toastTimer = window.setTimeout(() => {
+        elements.appToast.classList.remove("is-visible");
+        toastHideTimer = window.setTimeout(() => {
+            elements.appToast.hidden = true;
+        }, 160);
+    }, 2000);
+}
 
 function formatTime(seconds: number): string {
     if (isNaN(seconds) || seconds <= 0) return "0:00";
@@ -289,10 +371,13 @@ async function addTrackHandler() {
             state.tracks.push(mapStoredTrack(track));
         }
 
+        showToast(paths.length === 1 ? "Трек добавлен" : `Добавлено треков: ${paths.length}`);
+
         if (state.activeView === "media-library") renderMediaLibrary();
         if (state.activeView === "main") switchView("media-library");
     } catch (err) {
         console.error("Ошибка при выборе файла:", err);
+        showToast(`Не удалось добавить трек: ${String(err)}`, true);
     }
 }
 
@@ -406,6 +491,7 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
                 }
             } catch (error) {
                 console.error("Не удалось выполнить действие с треком:", error);
+                showToast(`Не удалось выполнить действие: ${String(error)}`, true);
             }
         });
     });
@@ -429,6 +515,8 @@ async function deleteTrackFromLibrary(trackId: string) {
         elements.sidebarTitle.textContent = "Трек не выбран";
         elements.sidebarArtist.textContent = "Выберите трек для воспроизведения";
         elements.editTrackBtn.disabled = true;
+        elements.changeTrackCoverBtn.disabled = true;
+        elements.sidebarCoverWrapper.classList.remove("has-cover");
         elements.playerCover.src = "./src/assets/media_library.jpg";
         elements.sidebarCover.src = "./src/assets/media_library.jpg";
         closeTrackEditor();
@@ -440,6 +528,7 @@ async function deleteTrackFromLibrary(trackId: string) {
     renderMediaLibrary();
     renderPlaylists();
     renderPlaylistDetail();
+    showToast("Трек удалён из медиатеки");
 }
 
 async function removeTrackFromPlaylist(trackId: string) {
@@ -450,6 +539,7 @@ async function removeTrackFromPlaylist(trackId: string) {
     playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
     renderPlaylistDetail();
     renderPlaylists();
+    showToast("Трек удалён из плейлиста");
 }
 
 function playTrack(trackId: string) {
@@ -476,12 +566,14 @@ function playTrack(trackId: string) {
 
 function updateTrackMetadata(track: Track) {
     const cover = track.cover || "./src/assets/media_library.jpg";
+    elements.sidebarCoverWrapper.classList.toggle("has-cover", Boolean(track.cover));
 
     elements.playerTitle.textContent = track.title;
     elements.playerArtist.textContent = track.artist;
     elements.sidebarTitle.textContent = track.title;
     elements.sidebarArtist.textContent = track.artist;
     elements.editTrackBtn.disabled = false;
+    elements.changeTrackCoverBtn.disabled = false;
     requestAnimationFrame(updateTrackTextMarquee);
 
     [elements.playerCover, elements.sidebarCover].forEach((image) => {
@@ -575,8 +667,8 @@ async function saveTrackMetadata() {
 
         renderActiveTrackList();
         closeTrackEditor();
-        elements.trackEditStatus.textContent = "Изменения сохранены";
-        elements.trackEditStatus.hidden = false;
+        elements.trackEditStatus.hidden = true;
+        showToast("Изменения сохранены");
     } catch (error) {
         if (wasCurrentTrack && state.currentTrackId === track.id) {
             try {
@@ -668,6 +760,7 @@ function openEditPlaylistModal() {
 async function submitPlaylistForm() {
     const name = elements.playlistNameInput.value.trim();
     const category = elements.playlistCategorySelect.value as PlaylistCategory;
+    const isEditing = playlistToEditId !== null;
     if (!name) {
         elements.playlistFormStatus.textContent = "Введите название плейлиста";
         elements.playlistFormStatus.hidden = false;
@@ -695,6 +788,7 @@ async function submitPlaylistForm() {
 
         closeModal(elements.createPlaylistModal);
         playlistToEditId = null;
+        showToast(isEditing ? "Изменения сохранены" : "Плейлист создан");
     } catch (error) {
         elements.playlistFormStatus.textContent = error instanceof Error ? error.message : "Не удалось сохранить плейлист";
         elements.playlistFormStatus.hidden = false;
@@ -731,7 +825,9 @@ function renderPlaylists() {
                 (pl) => `
       <div class="media-card" data-playlist-id="${pl.id}">
         <div class="card-cover-wrapper">
-          <div class="card-cover" style="background:#282828; display:flex; align-items:center; justify-content:center;">🎵</div>
+                    <div class="card-cover playlist-cover" style="background:#282828; display:flex; align-items:center; justify-content:center;">
+                        ${pl.cover ? `<img src="${pl.cover}" alt="Обложка: ${pl.title}" />` : "🎵"}
+                    </div>
         </div>
         <div class="card-title">${pl.title}</div>
         <div class="playlist-category-label">${pl.category}</div>
@@ -802,6 +898,8 @@ function openAddToPlaylistModal(trackId: string) {
                 if (pl && !pl.trackIds.includes(trackToAddToPlaylist)) {
                     await invoke("add_track_to_playlist", { playlistId: plId, trackId: trackToAddToPlaylist });
                     pl.trackIds.push(trackToAddToPlaylist);
+                    renderPlaylists();
+                    showToast("Трек добавлен в плейлист");
                 }
                 closeModal(elements.addToPlaylistModal);
                 trackToAddToPlaylist = null;
@@ -866,15 +964,32 @@ function initEvents() {
     // Плейлист Detail Навигация/Удаление
     elements.playlistBackBtn?.addEventListener("click", () => switchView("playlists"));
     elements.editPlaylistBtn?.addEventListener("click", openEditPlaylistModal);
+    elements.changePlaylistCoverBtn?.addEventListener("click", async () => {
+        if (!state.selectedPlaylistId) return;
+        try {
+            await changeCover("playlist", state.selectedPlaylistId);
+        } catch (error) {
+            showToast(`Не удалось сохранить обложку: ${String(error)}`, true);
+        }
+    });
     elements.deletePlaylistBtn?.addEventListener("click", async () => {
         if (state.selectedPlaylistId) {
             await invoke("delete_playlist", { playlistId: state.selectedPlaylistId });
             state.playlists = state.playlists.filter((p) => p.id !== state.selectedPlaylistId);
             switchView("playlists");
+            showToast("Плейлист удалён");
         }
     });
 
     // Воспроизведение
+    elements.changeTrackCoverBtn?.addEventListener("click", async () => {
+        if (!state.currentTrackId) return;
+        try {
+            await changeCover("track", state.currentTrackId);
+        } catch (error) {
+            showToast(`Не удалось сохранить обложку: ${String(error)}`, true);
+        }
+    });
     elements.editTrackBtn?.addEventListener("click", openTrackEditor);
     elements.trackEditForm?.addEventListener("submit", (event) => {
         event.preventDefault();

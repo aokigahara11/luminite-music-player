@@ -25,7 +25,9 @@ fn main() {
             edit_metadata_playlist,
             get_player_config,
             save_player_config,
-            edit_metadata_track
+            edit_metadata_track,
+            get_covers,
+            set_cover
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -36,6 +38,7 @@ pub struct AppPaths {
     pub app_dir: PathBuf,
     pub media_dir: PathBuf,
     pub covers_dir: PathBuf,
+    pub covers_path: PathBuf,
     pub library_path: PathBuf,
     pub config_path: PathBuf,
 }
@@ -76,6 +79,21 @@ impl Default for PlaylistCategory {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CoverKind {
+    Track,
+    Playlist,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Cover {
+    pub id: String,
+    pub kind: CoverKind,
+    pub entity_id: String,
+    pub path_file: String,
+}
+
 // Единая структура корневого JSON файла
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AppData {
@@ -111,6 +129,7 @@ pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
 
     let media_dir = app_dir.join("media");
     let covers_dir = app_dir.join("covers");
+    let covers_path = app_dir.join("covers.json");
     let library_path = app_dir.join("library.json");
     let config_path = app_dir.join("config.json");
 
@@ -124,9 +143,120 @@ pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
         app_dir,
         media_dir,
         covers_dir,
+        covers_path,
         library_path,
         config_path,
     })
+}
+
+// Чтение всей базы данных из JSON
+fn load_covers(covers_path: &Path) -> Result<Vec<Cover>, String> {
+    if !covers_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(covers_path)
+        .map_err(|error| format!("Ошибка чтения covers.json: {}", error))?;
+    serde_json::from_str(&content)
+        .map_err(|error| format!("Ошибка чтения данных covers.json: {}", error))
+}
+
+fn save_covers(covers_path: &Path, covers: &[Cover]) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(covers)
+        .map_err(|error| format!("Ошибка сериализации covers.json: {}", error))?;
+    fs::write(covers_path, content)
+        .map_err(|error| format!("Ошибка записи covers.json: {}", error))
+}
+
+fn remove_covers_for_entity(covers_path: &Path, kind: CoverKind, entity_id: &str) -> Result<(), String> {
+    let mut covers = load_covers(covers_path)?;
+    let removed_paths: Vec<PathBuf> = covers
+        .iter()
+        .filter(|cover| cover.kind == kind && cover.entity_id == entity_id)
+        .map(|cover| PathBuf::from(&cover.path_file))
+        .collect();
+    covers.retain(|cover| cover.kind != kind || cover.entity_id != entity_id);
+    save_covers(covers_path, &covers)?;
+
+    for path in removed_paths {
+        let _ = fs::remove_file(path);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_covers(app: tauri::AppHandle) -> Result<Vec<Cover>, String> {
+    let paths = get_all_paths(&app)?;
+    let covers = load_covers(&paths.covers_path)?;
+    if !paths.covers_path.exists() {
+        save_covers(&paths.covers_path, &covers)?;
+    }
+    Ok(covers)
+}
+
+#[tauri::command]
+fn set_cover(app: tauri::AppHandle, kind: CoverKind, entity_id: String, file_path: String) -> Result<Cover, String> {
+    let paths = get_all_paths(&app)?;
+    let app_data = load_app_data(&paths.library_path);
+    let entity_exists = match kind {
+        CoverKind::Track => app_data.tracks.iter().any(|track| track.id == entity_id),
+        CoverKind::Playlist => app_data.playlists.iter().any(|playlist| playlist.id == entity_id),
+    };
+    if !entity_exists {
+        return Err("Объект для обложки не найден".to_string());
+    }
+
+    let src_path = PathBuf::from(file_path);
+    if !src_path.is_file() {
+        return Err("Файл обложки не найден".to_string());
+    }
+
+    let extension = src_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .filter(|value| ["jpg", "jpeg", "png", "webp"].contains(&value.as_str()))
+        .ok_or_else(|| "Поддерживаются только JPG, PNG и WebP".to_string())?;
+    let cover = Cover {
+        id: Uuid::new_v4().to_string(),
+        kind,
+        entity_id: entity_id.clone(),
+        path_file: paths
+            .covers_dir
+            .join(format!("{}.{}", Uuid::new_v4(), extension))
+            .to_string_lossy()
+            .to_string(),
+    };
+    let dest_path = PathBuf::from(&cover.path_file);
+    fs::copy(&src_path, &dest_path)
+        .map_err(|error| format!("Ошибка копирования обложки: {}", error))?;
+
+    let mut covers = match load_covers(&paths.covers_path) {
+        Ok(covers) => covers,
+        Err(error) => {
+            let _ = fs::remove_file(&dest_path);
+            return Err(error);
+        }
+    };
+    let old_paths: Vec<PathBuf> = covers
+        .iter()
+        .filter(|item| item.kind == kind && item.entity_id == entity_id)
+        .map(|item| PathBuf::from(&item.path_file))
+        .collect();
+    covers.retain(|item| item.kind != kind || item.entity_id != entity_id);
+    covers.push(cover.clone());
+
+    if let Err(error) = save_covers(&paths.covers_path, &covers) {
+        let _ = fs::remove_file(&dest_path);
+        return Err(error);
+    }
+
+    for old_path in old_paths {
+        let _ = fs::remove_file(old_path);
+    }
+
+    Ok(cover)
 }
 
 // Чтение всей базы данных из JSON
@@ -271,6 +401,7 @@ fn delete_track(app: tauri::AppHandle, track_id: String) -> Result<Vec<Track>, S
     }
 
     save_app_data(&paths.library_path, &app_data)?;
+    remove_covers_for_entity(&paths.covers_path, CoverKind::Track, &track_id)?;
     Ok(app_data.tracks)
 }
 
@@ -370,6 +501,7 @@ fn delete_playlist(app: tauri::AppHandle, playlist_id: String) -> Result<Vec<Pla
 
     app_data.playlists.retain(|p| p.id != playlist_id);
     save_app_data(&paths.library_path, &app_data)?;
+    remove_covers_for_entity(&paths.covers_path, CoverKind::Playlist, &playlist_id)?;
 
     Ok(app_data.playlists)
 }
