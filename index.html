@@ -267,6 +267,12 @@
               <h2 class="section-title" id="playlist-detail-title">Название плейлиста</h2>
               <span class="playlist-track-count" id="playlist-detail-count">0 треков</span>
             </div>
+            <button class="btn-danger-icon playlist-edit-btn" id="edit-playlist-btn" type="button" title="Редактировать плейлист" aria-label="Редактировать плейлист">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path>
+              </svg>
+            </button>
             <button class="btn-danger-icon" id="delete-playlist-btn" title="Удалить плейлист">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
@@ -305,6 +311,24 @@
             <h2 class="sidebar-title" id="sidebar-title">Трек не выбран</h2>
             <p class="sidebar-artist" id="sidebar-artist">Выберите трек для воспроизведения</p>
           </div>
+
+          <button class="sidebar-edit-button" id="edit-track-btn" type="button" disabled>Редактировать</button>
+
+          <form class="sidebar-edit-form" id="track-edit-form" hidden>
+            <label class="sidebar-edit-field">
+              <span>Название</span>
+              <input id="track-title-input" name="title" type="text" maxlength="255" required />
+            </label>
+            <label class="sidebar-edit-field">
+              <span>Исполнитель</span>
+              <input id="track-artist-input" name="artist" type="text" maxlength="255" />
+            </label>
+            <div class="sidebar-edit-actions">
+              <button class="sidebar-edit-save" id="save-track-edit-btn" type="submit">Сохранить</button>
+              <button class="sidebar-edit-cancel" id="cancel-track-edit-btn" type="button">Отмена</button>
+            </div>
+          </form>
+          <p class="sidebar-edit-status" id="track-edit-status" role="status" aria-live="polite" hidden></p>
         </div>
       </aside>
 
@@ -405,11 +429,17 @@
       <div class="modal-overlay hidden" id="create-playlist-modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h3>Новый плейлист</h3>
+            <h3 id="playlist-modal-title">Новый плейлист</h3>
             <button class="btn-ctrl" id="close-modal-btn">&times;</button>
           </div>
           <div class="modal-body">
             <input type="text" id="playlist-name-input" class="search-input" placeholder="Название плейлиста" style="border-radius: 8px;" />
+            <select id="playlist-category-select" class="playlist-category-select" aria-label="Категория плейлиста">
+              <option value="EP">EP</option>
+              <option value="Альбом">Альбом</option>
+              <option value="Плейлист" selected>Плейлист</option>
+            </select>
+            <p class="playlist-form-status" id="playlist-form-status" role="status" aria-live="polite" hidden></p>
           </div>
           <div class="modal-footer">
             <button class="action-card" id="submit-playlist-btn" style="justify-content: center; width: 100%;">Создать</button>

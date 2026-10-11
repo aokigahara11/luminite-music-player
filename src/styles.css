@@ -595,6 +595,95 @@ input[type="range"]::-webkit-slider-thumb {
   color: rgba(255, 255, 255, 0.6);
 }
 
+.sidebar-edit-button,
+.sidebar-edit-save,
+.sidebar-edit-cancel {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sidebar-edit-button,
+.sidebar-edit-cancel {
+  background: #282828;
+}
+
+.sidebar-edit-button:hover,
+.sidebar-edit-cancel:hover {
+  background: #363636;
+}
+
+.sidebar-edit-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sidebar-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar-edit-form[hidden] {
+  display: none;
+}
+
+.sidebar-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+.sidebar-edit-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  outline: none;
+  background: #202020;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.sidebar-edit-field input:focus {
+  border-color: #b3b3b3;
+}
+
+.sidebar-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sidebar-edit-save {
+  border-color: #b3b3b3;
+  background: #b3b3b3;
+  color: #111;
+  font-weight: 600;
+}
+
+.sidebar-edit-save:hover {
+  background: #d0d0d0;
+}
+
+.sidebar-edit-save:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.sidebar-edit-status {
+  min-height: 18px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
 /* ==== Главный контейнер контента ==== */
 
 .main-content {
@@ -748,6 +837,14 @@ input[type="range"]::-webkit-slider-thumb {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.playlist-category-label {
+  display: inline-block;
+  margin-top: 5px;
+  color: #b3b3b3;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .card-artist {
@@ -983,6 +1080,41 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-muted, #a1a1aa);
 }
 
+.playlist-detail-header .section-title {
+  overflow-wrap: anywhere;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.playlist-category-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: #202020;
+  color: #fff;
+  font: inherit;
+}
+
+.playlist-category-select:focus {
+  outline: 1px solid #b3b3b3;
+}
+
+.playlist-form-status {
+  min-height: 18px;
+  color: #ff8b8b;
+  font-size: 12px;
+}
+
+.playlist-form-status[hidden] {
+  display: none;
+}
+
 /* Кнопка справа от заголовка */
 
 .section-header-row {
@@ -1118,6 +1250,16 @@ input[type="range"]::-webkit-slider-thumb {
   border-color: rgba(255, 77, 77, 0.2);
 }
 
+.playlist-edit-btn {
+  color: #888;
+}
+
+.playlist-edit-btn:hover {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.24);
+}
+
 
 .back-btn {
   display: flex;
@@ -1135,5 +1277,4 @@ input[type="range"]::-webkit-slider-thumb {
 .back-btn:hover {
   background: var(--bg-card-hover, #27272a);
 }
-
 

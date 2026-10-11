@@ -2,7 +2,8 @@
 
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::probe::Probe;
-use lofty::tag::Accessor;
+use lofty::config::WriteOptions;
+use lofty::tag::{Accessor, Tag};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, path::PathBuf};
 use tauri::Manager;
@@ -21,8 +22,10 @@ fn main() {
             remove_track_from_playlist,
             get_playlists,
             delete_playlist,
+            edit_metadata_playlist,
             get_player_config,
-            save_player_config
+            save_player_config,
+            edit_metadata_track
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -52,7 +55,25 @@ pub struct Track {
 pub struct Playlist {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub category: PlaylistCategory,
     pub id_tracks: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaylistCategory {
+    #[serde(rename = "EP")]
+    Ep,
+    #[serde(rename = "Альбом")]
+    Album,
+    #[serde(rename = "Плейлист")]
+    Playlist,
+}
+
+impl Default for PlaylistCategory {
+    fn default() -> Self {
+        Self::Playlist
+    }
 }
 
 // Единая структура корневого JSON файла
@@ -119,7 +140,25 @@ pub fn load_app_data(library_path: &Path) -> AppData {
     }
 
     match fs::read_to_string(library_path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Ok(content) => match serde_json::from_str::<AppData>(&content) {
+            Ok(app_data) => {
+                let needs_migration = serde_json::from_str::<serde_json::Value>(&content)
+                    .ok()
+                    .and_then(|value| {
+                        value.get("playlists")?.as_array().map(|playlists| {
+                            playlists.iter().any(|playlist| playlist.get("category").is_none())
+                        })
+                    })
+                    .unwrap_or(false);
+
+                if needs_migration {
+                    let _ = save_app_data(library_path, &app_data);
+                }
+
+                app_data
+            }
+            Err(_) => AppData::default(),
+        },
         Err(_) => AppData::default(),
     }
 }
@@ -266,13 +305,14 @@ fn search_library(app: tauri::AppHandle, query: String) -> Result<Vec<Track>, St
 
 // Создать плейлист
 #[tauri::command]
-fn create_playlist(app: tauri::AppHandle, name: String) -> Result<Playlist, String> {
+fn create_playlist(app: tauri::AppHandle, name: String, category: PlaylistCategory) -> Result<Playlist, String> {
     let paths = get_all_paths(&app)?;
     let mut app_data = load_app_data(&paths.library_path);
 
     let playlist = Playlist {
         id: Uuid::new_v4().to_string(),
         name,
+        category,
         id_tracks: Vec::new(),
     };
 
@@ -387,4 +427,86 @@ fn save_player_config(
         .map_err(|error| format!("Ошибка сериализации config.json: {}", error))?;
     fs::write(&paths.config_path, json)
         .map_err(|error| format!("Ошибка записи config.json: {}", error))
+}
+
+#[tauri::command]
+fn edit_metadata_track(app: tauri::AppHandle, id: String, title: String, artist: String) -> Result<Track, String> {
+    let paths = get_all_paths(&app)?;
+    let mut app_data = load_app_data(&paths.library_path);
+    let title = title.trim();
+    let artist = artist.trim();
+
+    if title.is_empty() {
+        return Err("Название трека не может быть пустым".to_string());
+    }
+
+    let track = app_data
+        .tracks
+        .iter_mut()
+        .find(|track| track.id == id)
+        .ok_or_else(|| "Трек с таким ID не найден".to_string())?;
+    let track_path = PathBuf::from(&track.path);
+    if !track_path.is_file() {
+        return Err("Файл трека не найден".to_string());
+    }
+
+    let mut tagged_file = Probe::open(&track_path)
+        .map_err(|error| format!("Ошибка открытия трека: {}", error))?
+        .read()
+        .map_err(|error| format!("Ошибка чтения тегов трека: {}", error))?;
+
+    if tagged_file.primary_tag().is_none() {
+        let tag_type = tagged_file.primary_tag_type();
+        tagged_file.insert_tag(Tag::new(tag_type));
+    }
+
+    if let Some(tag) = tagged_file.primary_tag_mut() {
+        tag.set_title(title.to_string());
+        if artist.is_empty() {
+            tag.remove_artist();
+        } else {
+            tag.set_artist(artist.to_string());
+        }
+    }
+
+    tagged_file
+        .save_to_path(&track_path, WriteOptions::default())
+        .map_err(|error| format!("Ошибка сохранения тегов трека: {}", error))?;
+
+    track.title = title.to_string();
+    track.artist = if artist.is_empty() {
+        None
+    } else {
+        Some(artist.to_string())
+    };
+
+    let updated_track = track.clone();
+    save_app_data(&paths.library_path, &app_data)?;
+
+    Ok(updated_track)
+}
+
+#[tauri::command]
+fn edit_metadata_playlist(app: tauri::AppHandle, id: String, name: String, category: PlaylistCategory) -> Result<Playlist, String> {
+    let paths = get_all_paths(&app)?;
+    let mut app_data = load_app_data(&paths.library_path);
+    let id = id.trim();
+    let name = name.trim();
+
+    if name.is_empty() {
+        return Err("Название плейлиста не должно быть пустым.".to_string());
+    }
+
+    let playlist = app_data
+        .playlists
+        .iter_mut()
+        .find(|playlist| playlist.id == id)
+        .ok_or_else(|| "Плейлист с таким ID не найден.".to_string())?;
+    playlist.name = name.to_string();
+    playlist.category = category;
+
+    let updated_playlist = playlist.clone();
+    save_app_data(&paths.library_path, &app_data)?;
+
+    Ok(updated_playlist)
 }

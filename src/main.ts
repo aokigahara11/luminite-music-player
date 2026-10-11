@@ -1,6 +1,8 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
+type PlaylistCategory = "EP" | "Альбом" | "Плейлист";
+
 interface Track {
     id: string;
     title: string;
@@ -14,6 +16,7 @@ interface Track {
 interface Playlist {
     id: string;
     title: string;
+    category: PlaylistCategory;
     trackIds: string[];
 }
 
@@ -28,6 +31,7 @@ interface StoredTrack {
 interface StoredPlaylist {
     id: string;
     name: string;
+    category: PlaylistCategory;
     id_tracks: string[];
 }
 
@@ -71,7 +75,12 @@ function mapStoredTrack(track: StoredTrack): Track {
 }
 
 function mapStoredPlaylist(playlist: StoredPlaylist): Playlist {
-    return { id: playlist.id, title: playlist.name, trackIds: playlist.id_tracks };
+    return {
+        id: playlist.id,
+        title: playlist.name,
+        category: playlist.category || "Плейлист",
+        trackIds: playlist.id_tracks,
+    };
 }
 
 function savePlayerConfig() {
@@ -148,6 +157,7 @@ const elements = {
     // Управление плейлистом
     playlistDetailTitle: document.getElementById("playlist-detail-title") as HTMLElement,
     playlistDetailCount: document.getElementById("playlist-detail-count") as HTMLElement,
+    editPlaylistBtn: document.getElementById("edit-playlist-btn") as HTMLButtonElement,
     deletePlaylistBtn: document.getElementById("delete-playlist-btn") as HTMLButtonElement,
     playlistBackBtn: document.getElementById("playlist-back-btn") as HTMLButtonElement,
 
@@ -158,6 +168,13 @@ const elements = {
     sidebarTitle: document.getElementById("sidebar-title") as HTMLElement,
     sidebarArtist: document.getElementById("sidebar-artist") as HTMLElement,
     sidebarCover: document.getElementById("sidebar-cover") as HTMLImageElement,
+    editTrackBtn: document.getElementById("edit-track-btn") as HTMLButtonElement,
+    trackEditForm: document.getElementById("track-edit-form") as HTMLFormElement,
+    trackTitleInput: document.getElementById("track-title-input") as HTMLInputElement,
+    trackArtistInput: document.getElementById("track-artist-input") as HTMLInputElement,
+    saveTrackEditBtn: document.getElementById("save-track-edit-btn") as HTMLButtonElement,
+    cancelTrackEditBtn: document.getElementById("cancel-track-edit-btn") as HTMLButtonElement,
+    trackEditStatus: document.getElementById("track-edit-status") as HTMLElement,
     playBtn: document.getElementById("play-btn") as HTMLButtonElement,
     prevBtn: document.getElementById("prev-btn") as HTMLButtonElement,
     nextBtn: document.getElementById("next-btn") as HTMLButtonElement,
@@ -172,6 +189,9 @@ const elements = {
     closeModalBtn: document.getElementById("close-modal-btn") as HTMLButtonElement,
     submitPlaylistBtn: document.getElementById("submit-playlist-btn") as HTMLButtonElement,
     playlistNameInput: document.getElementById("playlist-name-input") as HTMLInputElement,
+    playlistModalTitle: document.getElementById("playlist-modal-title") as HTMLElement,
+    playlistCategorySelect: document.getElementById("playlist-category-select") as HTMLSelectElement,
+    playlistFormStatus: document.getElementById("playlist-form-status") as HTMLElement,
 
     addToPlaylistModal: document.getElementById("add-to-playlist-modal") as HTMLElement,
     closeAddPlaylistModalBtn: document.getElementById("close-add-playlist-modal-btn") as HTMLButtonElement,
@@ -372,6 +392,7 @@ function playTrack(trackId: string) {
     const track = state.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
+    closeTrackEditor();
     pendingRestore = null;
 
     if (state.currentTrackId !== trackId) {
@@ -396,12 +417,116 @@ function updateTrackMetadata(track: Track) {
     elements.playerArtist.textContent = track.artist;
     elements.sidebarTitle.textContent = track.title;
     elements.sidebarArtist.textContent = track.artist;
+    elements.editTrackBtn.disabled = false;
     requestAnimationFrame(updateTrackTextMarquee);
 
     [elements.playerCover, elements.sidebarCover].forEach((image) => {
         image.src = cover;
         image.alt = track.title;
     });
+}
+
+function openTrackEditor() {
+    const track = state.tracks.find((item) => item.id === state.currentTrackId);
+    if (!track) return;
+
+    elements.trackTitleInput.value = track.title;
+    elements.trackArtistInput.value = track.artist === "Неизвестный исполнитель" ? "" : track.artist;
+    elements.trackEditStatus.textContent = "";
+    elements.trackEditStatus.hidden = true;
+    elements.trackEditForm.hidden = false;
+    elements.editTrackBtn.hidden = true;
+    elements.trackTitleInput.focus();
+}
+
+function closeTrackEditor() {
+    elements.trackEditForm.hidden = true;
+    elements.editTrackBtn.hidden = false;
+}
+
+async function reloadTrackAudio(track: Track, position: number, shouldPlay: boolean) {
+    const metadataLoaded = new Promise<void>((resolve, reject) => {
+        audio.addEventListener("loadedmetadata", () => resolve(), { once: true });
+        audio.addEventListener("error", () => reject(new Error("Не удалось загрузить аудиофайл")), { once: true });
+    });
+
+    audio.src = track.src;
+    audio.load();
+    await metadataLoaded;
+    audio.currentTime = Number.isFinite(audio.duration) ? Math.min(position, audio.duration) : position;
+
+    if (shouldPlay) {
+        try {
+            await audio.play();
+            state.isPlaying = true;
+        } catch {
+            state.isPlaying = false;
+        }
+    } else {
+        state.isPlaying = false;
+    }
+
+    updatePlayButtonIcon();
+    updateProgressDisplay();
+    savePlayerConfig();
+}
+
+async function saveTrackMetadata() {
+    const track = state.tracks.find((item) => item.id === state.currentTrackId);
+    const title = elements.trackTitleInput.value.trim();
+    const artist = elements.trackArtistInput.value.trim();
+    if (!track || !title) return;
+    const wasCurrentTrack = state.currentTrackId === track.id;
+    const playbackPosition = audio.currentTime;
+    const wasPlaying = wasCurrentTrack && state.isPlaying;
+
+    elements.saveTrackEditBtn.disabled = true;
+    elements.cancelTrackEditBtn.disabled = true;
+    elements.trackEditStatus.hidden = false;
+    elements.trackEditStatus.textContent = "Сохранение...";
+
+    if (wasCurrentTrack) {
+        audio.pause();
+        state.isPlaying = false;
+        audio.removeAttribute("src");
+        audio.load();
+        updatePlayButtonIcon();
+    }
+
+    try {
+        const storedTrack = await invoke<StoredTrack>("edit_metadata_track", {
+            id: track.id,
+            title,
+            artist,
+        });
+        const updatedTrack = { ...mapStoredTrack(storedTrack), cover: track.cover };
+        state.tracks = state.tracks.map((item) => item.id === updatedTrack.id ? updatedTrack : item);
+
+        if (state.currentTrackId === updatedTrack.id) {
+            updateTrackMetadata(updatedTrack);
+            if (wasCurrentTrack) {
+                await reloadTrackAudio(updatedTrack, playbackPosition, wasPlaying);
+            }
+        }
+
+        renderActiveTrackList();
+        closeTrackEditor();
+        elements.trackEditStatus.textContent = "Изменения сохранены";
+        elements.trackEditStatus.hidden = false;
+    } catch (error) {
+        if (wasCurrentTrack && state.currentTrackId === track.id) {
+            try {
+                await reloadTrackAudio(track, playbackPosition, wasPlaying);
+            } catch (reloadError) {
+                console.error("Не удалось восстановить воспроизведение:", reloadError);
+            }
+        }
+        elements.trackEditStatus.textContent = error instanceof Error ? error.message : "Не удалось сохранить изменения";
+        elements.trackEditStatus.hidden = false;
+    } finally {
+        elements.saveTrackEditBtn.disabled = false;
+        elements.cancelTrackEditBtn.disabled = false;
+    }
 }
 
 function renderActiveTrackList() {
@@ -448,9 +573,75 @@ function playPrevTrack() {
     playTrack(state.tracks[prevIdx].id);
 }
 
-async function createPlaylist(title: string) {
+let playlistToEditId: string | null = null;
+
+function openCreatePlaylistModal() {
+    playlistToEditId = null;
+    elements.playlistModalTitle.textContent = "Новый плейлист";
+    elements.submitPlaylistBtn.textContent = "Создать";
+    elements.playlistNameInput.value = "";
+    elements.playlistCategorySelect.value = "Плейлист";
+    elements.playlistFormStatus.textContent = "";
+    elements.playlistFormStatus.hidden = true;
+    openModal(elements.createPlaylistModal);
+}
+
+function openEditPlaylistModal() {
+    const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
+    if (!playlist) return;
+
+    playlistToEditId = playlist.id;
+    elements.playlistModalTitle.textContent = "Редактировать плейлист";
+    elements.submitPlaylistBtn.textContent = "Сохранить";
+    elements.playlistNameInput.value = playlist.title;
+    elements.playlistCategorySelect.value = playlist.category;
+    elements.playlistFormStatus.textContent = "";
+    elements.playlistFormStatus.hidden = true;
+    openModal(elements.createPlaylistModal);
+    elements.playlistNameInput.focus();
+}
+
+async function submitPlaylistForm() {
+    const name = elements.playlistNameInput.value.trim();
+    const category = elements.playlistCategorySelect.value as PlaylistCategory;
+    if (!name) {
+        elements.playlistFormStatus.textContent = "Введите название плейлиста";
+        elements.playlistFormStatus.hidden = false;
+        elements.playlistNameInput.focus();
+        return;
+    }
+
+    elements.submitPlaylistBtn.disabled = true;
+    elements.playlistFormStatus.hidden = true;
+
+    try {
+        if (playlistToEditId) {
+            const storedPlaylist = await invoke<StoredPlaylist>("edit_metadata_playlist", {
+                id: playlistToEditId,
+                name,
+                category,
+            });
+            const updatedPlaylist = mapStoredPlaylist(storedPlaylist);
+            state.playlists = state.playlists.map((playlist) => playlist.id === updatedPlaylist.id ? updatedPlaylist : playlist);
+            renderPlaylists();
+            renderPlaylistDetail();
+        } else {
+            await createPlaylist(name, category);
+        }
+
+        closeModal(elements.createPlaylistModal);
+        playlistToEditId = null;
+    } catch (error) {
+        elements.playlistFormStatus.textContent = error instanceof Error ? error.message : "Не удалось сохранить плейлист";
+        elements.playlistFormStatus.hidden = false;
+    } finally {
+        elements.submitPlaylistBtn.disabled = false;
+    }
+}
+
+async function createPlaylist(title: string, category: PlaylistCategory) {
     if (!title.trim()) return;
-    const storedPlaylist = await invoke<StoredPlaylist>("create_playlist", { name: title.trim() });
+    const storedPlaylist = await invoke<StoredPlaylist>("create_playlist", { name: title.trim(), category });
     const newPlaylist = mapStoredPlaylist(storedPlaylist);
     if (trackToAddToPlaylist) {
         await invoke("add_track_to_playlist", {
@@ -479,6 +670,7 @@ function renderPlaylists() {
           <div class="card-cover" style="background:#282828; display:flex; align-items:center; justify-content:center;">🎵</div>
         </div>
         <div class="card-title">${pl.title}</div>
+        <div class="playlist-category-label">${pl.category}</div>
         <div class="card-artist">${pl.trackIds.length} треков</div>
       </div>
     `,
@@ -502,7 +694,7 @@ function renderPlaylistDetail() {
     if (!playlist) return;
 
     elements.playlistDetailTitle.textContent = playlist.title;
-    elements.playlistDetailCount.textContent = `${playlist.trackIds.length} треков`;
+    elements.playlistDetailCount.textContent = `${playlist.category} · ${playlist.trackIds.length} треков`;
 
     const playlistTracks = state.tracks.filter((t) => playlist.trackIds.includes(t.id));
     renderTrackList(elements.playlistTrackListContainer, playlistTracks, "playlist");
@@ -570,14 +762,11 @@ function initEvents() {
     elements.emptyScanBtn?.addEventListener("click", addTrackHandler);
 
     // Создание плейлистов
-    const openPlModal = () => openModal(elements.createPlaylistModal);
+    const openPlModal = openCreatePlaylistModal;
     elements.createPlaylistBtn?.addEventListener("click", openPlModal);
     elements.playlistsCreateBtn?.addEventListener("click", openPlModal);
     elements.emptyCreatePlaylistBtn?.addEventListener("click", openPlModal);
-    elements.submitPlaylistBtn?.addEventListener("click", async () => {
-        await createPlaylist(elements.playlistNameInput.value);
-        elements.playlistNameInput.value = "";
-    });
+    elements.submitPlaylistBtn?.addEventListener("click", submitPlaylistForm);
 
     elements.closeAddPlaylistModalBtn?.addEventListener("click", () => {
         closeModal(elements.addToPlaylistModal);
@@ -586,16 +775,18 @@ function initEvents() {
 
     elements.modalCreatePlaylistBtn?.addEventListener("click", () => {
         closeModal(elements.addToPlaylistModal);
-        openModal(elements.createPlaylistModal);
+        openCreatePlaylistModal();
         elements.playlistNameInput.focus();
     });
     elements.closeModalBtn?.addEventListener("click", () => {
         closeModal(elements.createPlaylistModal);
         trackToAddToPlaylist = null;
+        playlistToEditId = null;
     });
 
     // Плейлист Detail Навигация/Удаление
     elements.playlistBackBtn?.addEventListener("click", () => switchView("playlists"));
+    elements.editPlaylistBtn?.addEventListener("click", openEditPlaylistModal);
     elements.deletePlaylistBtn?.addEventListener("click", async () => {
         if (state.selectedPlaylistId) {
             await invoke("delete_playlist", { playlistId: state.selectedPlaylistId });
@@ -605,6 +796,12 @@ function initEvents() {
     });
 
     // Воспроизведение
+    elements.editTrackBtn?.addEventListener("click", openTrackEditor);
+    elements.trackEditForm?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void saveTrackMetadata();
+    });
+    elements.cancelTrackEditBtn?.addEventListener("click", closeTrackEditor);
     elements.playBtn?.addEventListener("click", togglePlay);
     elements.nextBtn?.addEventListener("click", playNextTrack);
     elements.prevBtn?.addEventListener("click", playPrevTrack);
