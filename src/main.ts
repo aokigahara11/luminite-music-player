@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 interface Track {
     id: string;
@@ -15,6 +15,27 @@ interface Playlist {
     id: string;
     title: string;
     trackIds: string[];
+}
+
+interface StoredTrack {
+    id: string;
+    path: string;
+    title: string;
+    artist: string | null;
+    duration: number;
+}
+
+interface StoredPlaylist {
+    id: string;
+    name: string;
+    id_tracks: string[];
+}
+
+interface PlayerConfig {
+    current_track_id: string | null;
+    position_secs: number;
+    volume: number;
+    is_playing: boolean;
 }
 
 interface AppState {
@@ -38,6 +59,64 @@ const state: AppState = {
 };
 
 const audio = new Audio();
+let pendingRestore: PlayerConfig | null = null;
+let playerSaveQueue: Promise<void> = Promise.resolve();
+
+function mapStoredTrack(track: StoredTrack): Track {
+    return {
+        ...track,
+        artist: track.artist || "Неизвестный исполнитель",
+        src: convertFileSrc(track.path),
+    };
+}
+
+function mapStoredPlaylist(playlist: StoredPlaylist): Playlist {
+    return { id: playlist.id, title: playlist.name, trackIds: playlist.id_tracks };
+}
+
+function savePlayerConfig() {
+    const config: PlayerConfig = {
+        current_track_id: state.currentTrackId,
+        position_secs: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+        volume: audio.volume,
+        is_playing: state.isPlaying,
+    };
+
+    playerSaveQueue = playerSaveQueue
+        .then(() => invoke<void>("save_player_config", {
+            currentTrackId: config.current_track_id,
+            positionSecs: config.position_secs,
+            volume: config.volume,
+            isPlaying: config.is_playing,
+        }))
+        .catch((error) => console.error("Не удалось сохранить состояние плеера:", error));
+}
+
+async function loadSavedData() {
+    const [tracks, playlists, playerConfig] = await Promise.all([
+        invoke<StoredTrack[]>("get_library"),
+        invoke<StoredPlaylist[]>("get_playlists"),
+        invoke<PlayerConfig>("get_player_config"),
+    ]);
+    state.tracks = tracks.map(mapStoredTrack);
+    state.playlists = playlists.map(mapStoredPlaylist);
+
+    audio.volume = playerConfig.volume;
+    elements.volumeSlider.value = Math.round(playerConfig.volume * 100).toString();
+
+    const savedTrack = state.tracks.find((track) => track.id === playerConfig.current_track_id);
+    if (savedTrack) {
+        pendingRestore = playerConfig;
+        state.currentTrackId = savedTrack.id;
+        state.isPlaying = playerConfig.is_playing;
+        audio.src = savedTrack.src;
+        updateTrackMetadata(savedTrack);
+        updatePlayButtonIcon();
+    }
+
+    renderMediaLibrary();
+    renderPlaylists();
+}
 
 const elements = {
     // Навигация
@@ -186,20 +265,8 @@ async function addTrackHandler() {
         const paths = Array.isArray(selected) ? selected : [selected];
 
         for (const filePath of paths) {
-            const fileName = filePath.split(/[/\\]/).pop() || "Unknown Track";
-            const title = fileName.substring(0, fileName.lastIndexOf(".")) || fileName;
-            const assetUrl = convertFileSrc(filePath);
-
-            const track: Track = {
-                id: crypto.randomUUID(),
-                title: title,
-                artist: "Неизвестный исполнитель",
-                path: filePath,
-                src: assetUrl,
-                duration: 0,
-            };
-
-            state.tracks.push(track);
+            const track = await invoke<StoredTrack>("import_track", { filePath });
+            state.tracks.push(mapStoredTrack(track));
         }
 
         if (state.activeView === "media-library") renderMediaLibrary();
@@ -279,7 +346,7 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
 
     // Действие кнопки зависит от того, где отображается список.
     container.querySelectorAll(".add-to-pl-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
+        btn.addEventListener("click", async (e) => {
             e.stopPropagation();
             const trackId = btn.getAttribute("data-id");
             if (trackId) openAddToPlaylistModal(trackId);
@@ -287,12 +354,13 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
     });
 
     container.querySelectorAll(".remove-from-pl-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
+        btn.addEventListener("click", async (e) => {
             e.stopPropagation();
             const trackId = btn.getAttribute("data-id");
             const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
             if (!trackId || !playlist) return;
 
+            await invoke("remove_track_from_playlist", { playlistId: playlist.id, trackId });
             playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
             renderPlaylistDetail();
             renderPlaylists();
@@ -303,6 +371,8 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
 function playTrack(trackId: string) {
     const track = state.tracks.find((t) => t.id === trackId);
     if (!track) return;
+
+    pendingRestore = null;
 
     if (state.currentTrackId !== trackId) {
         state.currentTrackId = trackId;
@@ -316,6 +386,7 @@ function playTrack(trackId: string) {
     state.isPlaying = true;
     updatePlayButtonIcon();
     renderActiveTrackList();
+    savePlayerConfig();
 }
 
 function updateTrackMetadata(track: Track) {
@@ -354,6 +425,7 @@ function togglePlay() {
     }
     updatePlayButtonIcon();
     renderActiveTrackList();
+    savePlayerConfig();
 }
 
 function updatePlayButtonIcon() {
@@ -376,14 +448,15 @@ function playPrevTrack() {
     playTrack(state.tracks[prevIdx].id);
 }
 
-function createPlaylist(title: string) {
+async function createPlaylist(title: string) {
     if (!title.trim()) return;
-    const newPlaylist: Playlist = {
-        id: crypto.randomUUID(),
-        title: title.trim(),
-        trackIds: [],
-    };
+    const storedPlaylist = await invoke<StoredPlaylist>("create_playlist", { name: title.trim() });
+    const newPlaylist = mapStoredPlaylist(storedPlaylist);
     if (trackToAddToPlaylist) {
+        await invoke("add_track_to_playlist", {
+            playlistId: newPlaylist.id,
+            trackId: trackToAddToPlaylist,
+        });
         newPlaylist.trackIds.push(trackToAddToPlaylist);
         trackToAddToPlaylist = null;
     }
@@ -466,11 +539,12 @@ function openAddToPlaylistModal(trackId: string) {
     elements.modalPlaylistsEmpty.classList.add("hidden");
     elements.modalPlaylistsList.classList.remove("hidden");
     elements.modalPlaylistsList.querySelectorAll(".modal-pl-item").forEach((btn) => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", async () => {
             const plId = btn.getAttribute("data-id");
             if (plId && trackToAddToPlaylist) {
                 const pl = state.playlists.find((p) => p.id === plId);
                 if (pl && !pl.trackIds.includes(trackToAddToPlaylist)) {
+                    await invoke("add_track_to_playlist", { playlistId: plId, trackId: trackToAddToPlaylist });
                     pl.trackIds.push(trackToAddToPlaylist);
                 }
                 closeModal(elements.addToPlaylistModal);
@@ -500,8 +574,8 @@ function initEvents() {
     elements.createPlaylistBtn?.addEventListener("click", openPlModal);
     elements.playlistsCreateBtn?.addEventListener("click", openPlModal);
     elements.emptyCreatePlaylistBtn?.addEventListener("click", openPlModal);
-    elements.submitPlaylistBtn?.addEventListener("click", () => {
-        createPlaylist(elements.playlistNameInput.value);
+    elements.submitPlaylistBtn?.addEventListener("click", async () => {
+        await createPlaylist(elements.playlistNameInput.value);
         elements.playlistNameInput.value = "";
     });
 
@@ -522,8 +596,9 @@ function initEvents() {
 
     // Плейлист Detail Навигация/Удаление
     elements.playlistBackBtn?.addEventListener("click", () => switchView("playlists"));
-    elements.deletePlaylistBtn?.addEventListener("click", () => {
+    elements.deletePlaylistBtn?.addEventListener("click", async () => {
         if (state.selectedPlaylistId) {
+            await invoke("delete_playlist", { playlistId: state.selectedPlaylistId });
             state.playlists = state.playlists.filter((p) => p.id !== state.selectedPlaylistId);
             switchView("playlists");
         }
@@ -535,9 +610,27 @@ function initEvents() {
     elements.prevBtn?.addEventListener("click", playPrevTrack);
 
     // События Audio
-    audio.addEventListener("loadedmetadata", () => {
+    audio.addEventListener("loadedmetadata", async () => {
         const currentTrack = state.tracks.find((t) => t.id === state.currentTrackId);
         if (currentTrack) currentTrack.duration = audio.duration;
+
+        if (pendingRestore && pendingRestore.current_track_id === state.currentTrackId) {
+            const savedState = pendingRestore;
+            pendingRestore = null;
+            audio.currentTime = Math.min(savedState.position_secs, audio.duration);
+
+            if (savedState.is_playing) {
+                try {
+                    await audio.play();
+                    state.isPlaying = true;
+                } catch {
+                    state.isPlaying = false;
+                }
+                updatePlayButtonIcon();
+            }
+            savePlayerConfig();
+        }
+
         updateProgressDisplay();
         renderActiveTrackList();
     });
@@ -546,6 +639,10 @@ function initEvents() {
         updateProgressDisplay();
     });
 
+    window.setInterval(() => {
+        if (state.isPlaying) savePlayerConfig();
+    }, 5000);
+
     audio.addEventListener("ended", playNextTrack);
 
     elements.progressSlider?.addEventListener("input", () => {
@@ -553,6 +650,7 @@ function initEvents() {
         audio.currentTime = seekTime;
         updateProgressDisplay(seekTime);
         updateProgressTooltip(seekTime);
+        savePlayerConfig();
     });
 
     elements.progressSlider?.addEventListener("pointermove", (event) => {
@@ -564,6 +662,7 @@ function initEvents() {
 
     elements.volumeSlider?.addEventListener("input", () => {
         audio.volume = Number(elements.volumeSlider.value) / 100;
+        savePlayerConfig();
     });
 
     // Поиск
@@ -603,7 +702,12 @@ function initEvents() {
 }
 
 // Запуск приложения
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     initEvents();
+    try {
+        await loadSavedData();
+    } catch (error) {
+        console.error("Не удалось загрузить сохранённую библиотеку:", error);
+    }
     switchView("main");
 });

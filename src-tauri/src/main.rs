@@ -6,14 +6,13 @@ use lofty::tag::Accessor;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, path::PathBuf};
 use tauri::Manager;
-use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            pick_files,
+            import_track,
             get_library,
             delete_track,
             search_library,
@@ -21,7 +20,9 @@ fn main() {
             add_track_to_playlist,
             remove_track_from_playlist,
             get_playlists,
-            delete_playlist
+            delete_playlist,
+            get_player_config,
+            save_player_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -33,6 +34,7 @@ pub struct AppPaths {
     pub media_dir: PathBuf,
     pub covers_dir: PathBuf,
     pub library_path: PathBuf,
+    pub config_path: PathBuf,
 }
 
 // Структура для работы с данными трека
@@ -60,6 +62,25 @@ pub struct AppData {
     pub playlists: Vec<Playlist>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PlayerConfig {
+    pub current_track_id: Option<String>,
+    pub position_secs: f64,
+    pub volume: f64,
+    pub is_playing: bool,
+}
+
+impl Default for PlayerConfig {
+    fn default() -> Self {
+        Self {
+            current_track_id: None,
+            position_secs: 0.0,
+            volume: 0.7,
+            is_playing: false,
+        }
+    }
+}
+
 // Получить директории приложения в AppData
 pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
     let app_dir = app
@@ -70,6 +91,7 @@ pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
     let media_dir = app_dir.join("media");
     let covers_dir = app_dir.join("covers");
     let library_path = app_dir.join("library.json");
+    let config_path = app_dir.join("config.json");
 
     fs::create_dir_all(&media_dir)
         .map_err(|e| format!("Ошибка создания папки media: {}", e))?;
@@ -82,6 +104,7 @@ pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
         media_dir,
         covers_dir,
         library_path,
+        config_path,
     })
 }
 
@@ -142,40 +165,39 @@ pub fn parse_track_metadata(file_path: &Path) -> Result<Track, String> {
     })
 }
 
-// Выбрать аудиофайл и добавить в медиатеку
+// Скопировать трек в хранилище приложения и добавить его в библиотеку
 #[tauri::command]
-async fn pick_files(app: tauri::AppHandle) -> Result<Option<Track>, String> {
+fn import_track(app: tauri::AppHandle, file_path: String) -> Result<Track, String> {
     let paths = get_all_paths(&app)?;
-
-    let file_path = app
-        .dialog()
-        .file()
-        .set_title("Выберите трек")
-        .add_filter("Audio", &["mp3", "wav", "flac"])
-        .blocking_pick_file();
-
-    match file_path {
-        Some(file_path) => {
-            let src_path = file_path.into_path().map_err(|e| e.to_string())?;
-            let file_name = src_path
-                .file_name()
-                .ok_or_else(|| "Не удалось получить имя файла".to_string())?;
-
-            let dest_path = paths.media_dir.join(file_name);
-
-            fs::copy(&src_path, &dest_path)
-                .map_err(|err| format!("Ошибка копирования: {}", err))?;
-
-            let track = parse_track_metadata(&dest_path)?;
-
-            let mut app_data = load_app_data(&paths.library_path);
-            app_data.tracks.push(track.clone());
-            save_app_data(&paths.library_path, &app_data)?;
-
-            Ok(Some(track))
-        }
-        None => Ok(None),
+    let src_path = PathBuf::from(file_path);
+    if !src_path.is_file() {
+        return Err("Исходный аудиофайл не найден".to_string());
     }
+
+    let extension = src_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| format!(".{}", value))
+        .unwrap_or_default();
+    let dest_path = paths.media_dir.join(format!("{}{}", Uuid::new_v4(), extension));
+    fs::copy(&src_path, &dest_path).map_err(|err| format!("Ошибка копирования: {}", err))?;
+
+    let track = match parse_track_metadata(&dest_path) {
+        Ok(track) => track,
+        Err(error) => {
+            let _ = fs::remove_file(&dest_path);
+            return Err(error);
+        }
+    };
+
+    let mut app_data = load_app_data(&paths.library_path);
+    app_data.tracks.push(track.clone());
+    if let Err(error) = save_app_data(&paths.library_path, &app_data) {
+        let _ = fs::remove_file(&dest_path);
+        return Err(error);
+    }
+
+    Ok(track)
 }
 
 // Получить все треки
@@ -310,4 +332,59 @@ fn delete_playlist(app: tauri::AppHandle, playlist_id: String) -> Result<Vec<Pla
     save_app_data(&paths.library_path, &app_data)?;
 
     Ok(app_data.playlists)
+}
+
+fn load_player_config(config_path: &Path) -> PlayerConfig {
+    let config = fs::read_to_string(config_path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<PlayerConfig>(&content).ok())
+        .unwrap_or_default();
+
+    PlayerConfig {
+        position_secs: if config.position_secs.is_finite() {
+            config.position_secs.max(0.0)
+        } else {
+            0.0
+        },
+        volume: if config.volume.is_finite() {
+            config.volume.clamp(0.0, 1.0)
+        } else {
+            0.7
+        },
+        ..config
+    }
+}
+
+#[tauri::command]
+fn get_player_config(app: tauri::AppHandle) -> Result<PlayerConfig, String> {
+    let paths = get_all_paths(&app)?;
+    Ok(load_player_config(&paths.config_path))
+}
+
+#[tauri::command]
+fn save_player_config(
+    app: tauri::AppHandle,
+    current_track_id: Option<String>,
+    position_secs: f64,
+    volume: f64,
+    is_playing: bool) -> Result<(), String> {
+    let paths = get_all_paths(&app)?;
+    let config = PlayerConfig {
+        current_track_id,
+        position_secs: if position_secs.is_finite() {
+            position_secs.max(0.0)
+        } else {
+            0.0
+        },
+        volume: if volume.is_finite() {
+            volume.clamp(0.0, 1.0)
+        } else {
+            0.7
+        },
+        is_playing,
+    };
+    let json = serde_json::to_string_pretty(&config)
+        .map_err(|error| format!("Ошибка сериализации config.json: {}", error))?;
+    fs::write(&paths.config_path, json)
+        .map_err(|error| format!("Ошибка записи config.json: {}", error))
 }
