@@ -1212,6 +1212,90 @@ input[type="range"]::-webkit-slider-thumb {
   color: #888;
 }
 
+.col-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.track-actions-menu {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  width: 32px;
+  height: 32px;
+}
+
+.track-menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.track-menu-trigger:hover,
+.track-menu-trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.track-actions-popover {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 4px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  width: 190px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #242424;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.track-actions-popover[hidden] {
+  display: none;
+}
+
+.track-actions-popover.opens-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.track-menu-option {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #e5e5e5;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.track-menu-option:hover,
+.track-menu-option:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.track-menu-option-danger:hover,
+.track-menu-option-danger:focus-visible {
+  background: rgba(255, 77, 77, 0.12);
+  color: #ff8b8b;
+}
+
 .btn-delete-track {
   background: none;
   border: none;

@@ -326,20 +326,21 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
         .map((track, idx) => {
             const isCurrent = state.currentTrackId === track.id;
             const isPlaying = isCurrent && state.isPlaying;
-            const actionButton =
-                context === "playlist"
-                    ? `<button class="btn-ctrl remove-from-pl-btn" data-id="${track.id}" title="Удалить из плейлиста" aria-label="Удалить ${track.title} из плейлиста">
-          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>`
-                : `<button class="btn-ctrl add-to-pl-btn" data-id="${track.id}" title="Добавить в плейлист" aria-label="Добавить ${track.title} в плейлист">
-                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                </button>`;
+                        const menuActions = context === "playlist"
+                                ? `<button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="remove-from-playlist" data-id="${track.id}">Удалить из плейлиста</button>`
+                                : `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>
+                                     <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="delete-track" data-id="${track.id}">Удалить из медиатеки</button>`;
+                        const actionMenu = `
+                <div class="track-actions-menu">
+                    <button class="track-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Действия с треком ${track.title}" title="Действия с треком">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="5" cy="12" r="1.7"></circle>
+                            <circle cx="12" cy="12" r="1.7"></circle>
+                            <circle cx="19" cy="12" r="1.7"></circle>
+                        </svg>
+                    </button>
+                    <div class="track-actions-popover" role="menu" hidden>${menuActions}</div>
+                </div>`;
 
             return `
       <div class="track-row ${isCurrent ? "active" : ""} ${isPlaying ? "playing" : ""}" data-id="${track.id}">
@@ -347,7 +348,7 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
         <span class="col-title">${track.title}</span>
         <span class="col-artist">${track.artist}</span>
         <span class="col-duration">${formatTime(track.duration)}</span>
-        <span class="col-actions">${actionButton}</span>
+        <span class="col-actions">${actionMenu}</span>
       </div>`;
         })
         .join("");
@@ -364,28 +365,91 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
         });
     });
 
-    // Действие кнопки зависит от того, где отображается список.
-    container.querySelectorAll(".add-to-pl-btn").forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const trackId = btn.getAttribute("data-id");
-            if (trackId) openAddToPlaylistModal(trackId);
+    container.querySelectorAll<HTMLButtonElement>(".track-menu-trigger").forEach((button) => {
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const row = button.closest(".track-row");
+            const menu = row?.querySelector<HTMLElement>(".track-actions-popover");
+            if (!menu) return;
+
+            container.querySelectorAll<HTMLElement>(".track-actions-popover").forEach((openMenu) => {
+                openMenu.hidden = true;
+                openMenu.closest(".track-actions-menu")?.querySelector(".track-menu-trigger")?.setAttribute("aria-expanded", "false");
+            });
+
+            menu.hidden = false;
+            button.setAttribute("aria-expanded", "true");
+            const menuHeight = menu.getBoundingClientRect().height;
+            const spaceBelow = window.innerHeight - button.getBoundingClientRect().bottom;
+            menu.classList.toggle("opens-up", spaceBelow < menuHeight + 12);
         });
     });
 
-    container.querySelectorAll(".remove-from-pl-btn").forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const trackId = btn.getAttribute("data-id");
-            const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
-            if (!trackId || !playlist) return;
+    container.querySelectorAll<HTMLButtonElement>(".track-menu-option").forEach((button) => {
+        button.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            const trackId = button.dataset.id;
+            const action = button.dataset.action;
+            if (!trackId || !action) return;
 
-            await invoke("remove_track_from_playlist", { playlistId: playlist.id, trackId });
-            playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
-            renderPlaylistDetail();
-            renderPlaylists();
+            const menu = button.closest<HTMLElement>(".track-actions-popover");
+            if (menu) menu.hidden = true;
+            button.closest(".track-actions-menu")?.querySelector(".track-menu-trigger")?.setAttribute("aria-expanded", "false");
+
+            try {
+                if (action === "add-to-playlist") {
+                    openAddToPlaylistModal(trackId);
+                } else if (action === "delete-track") {
+                    await deleteTrackFromLibrary(trackId);
+                } else if (action === "remove-from-playlist") {
+                    await removeTrackFromPlaylist(trackId);
+                }
+            } catch (error) {
+                console.error("Не удалось выполнить действие с треком:", error);
+            }
         });
     });
+}
+
+async function deleteTrackFromLibrary(trackId: string) {
+    await invoke<StoredTrack[]>("delete_track", { trackId });
+    state.tracks = state.tracks.filter((track) => track.id !== trackId);
+    state.playlists.forEach((playlist) => {
+        playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
+    });
+
+    if (state.currentTrackId === trackId) {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+        state.currentTrackId = null;
+        state.isPlaying = false;
+        elements.playerTitle.textContent = "Трек не выбран";
+        elements.playerArtist.textContent = "Выберите трек для воспроизведения";
+        elements.sidebarTitle.textContent = "Трек не выбран";
+        elements.sidebarArtist.textContent = "Выберите трек для воспроизведения";
+        elements.editTrackBtn.disabled = true;
+        elements.playerCover.src = "./src/assets/media_library.jpg";
+        elements.sidebarCover.src = "./src/assets/media_library.jpg";
+        closeTrackEditor();
+        updatePlayButtonIcon();
+        updateProgressDisplay(0);
+        savePlayerConfig();
+    }
+
+    renderMediaLibrary();
+    renderPlaylists();
+    renderPlaylistDetail();
+}
+
+async function removeTrackFromPlaylist(trackId: string) {
+    const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
+    if (!playlist) return;
+
+    await invoke("remove_track_from_playlist", { playlistId: playlist.id, trackId });
+    playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
+    renderPlaylistDetail();
+    renderPlaylists();
 }
 
 function playTrack(trackId: string) {
@@ -750,6 +814,21 @@ function openAddToPlaylistModal(trackId: string) {
 
 function initEvents() {
     window.addEventListener("resize", updateTrackTextMarquee);
+    document.addEventListener("click", () => {
+        document.querySelectorAll<HTMLElement>(".track-actions-popover:not([hidden])").forEach((menu) => {
+            menu.hidden = true;
+            menu.closest(".track-actions-menu")?.querySelector(".track-menu-trigger")?.setAttribute("aria-expanded", "false");
+        });
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        document.querySelectorAll<HTMLElement>(".track-actions-popover:not([hidden])").forEach((menu) => {
+            menu.hidden = true;
+            const trigger = menu.closest(".track-actions-menu")?.querySelector<HTMLButtonElement>(".track-menu-trigger");
+            trigger?.setAttribute("aria-expanded", "false");
+            trigger?.focus();
+        });
+    });
 
     // Навигация
     elements.mainBtn?.addEventListener("click", () => switchView("main"));
