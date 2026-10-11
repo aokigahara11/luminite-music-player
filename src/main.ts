@@ -1,256 +1,609 @@
-import { invoke } from '@tauri-apps/api/core';
+import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
-// Интерфейс для описания метаданных трека
 interface Track {
-  id: string;
-  path: string;
-  title: string;
-  artist?: string;
-  duration: number;
+    id: string;
+    title: string;
+    artist: string;
+    path: string;
+    src: string;
+    duration: number;
+    cover?: string;
 }
 
-// Интерфейс для описания плейлиста
 interface Playlist {
-  id: string;
-  title: string;
-  trackCount: number;
+    id: string;
+    title: string;
+    trackIds: string[];
 }
 
-// Массив для хранения всех плейлистов
-let playlists: Playlist[] = [];
-
-// Функция для визуального обновления прогресс-бара и слайдера громкости
-function updateSlider(slider: HTMLInputElement): void {
-  const min = Number(slider.min) || 0;
-  const max = Number(slider.max) || 100;
-  const val = Number(slider.value);
-  const percent = ((val - min) / (max - min)) * 100;
-  slider.style.setProperty('--progress', `${percent}%`);
+interface AppState {
+    tracks: Track[];
+    playlists: Playlist[];
+    currentTrackId: string | null;
+    isPlaying: boolean;
+    activeView: "main" | "media-library" | "playlists" | "playlist-detail";
+    selectedPlaylistId: string | null;
+    searchQuery: string;
 }
 
-// Преобразование секунд в формат 0:00
+const state: AppState = {
+    tracks: [],
+    playlists: [],
+    currentTrackId: null,
+    isPlaying: false,
+    activeView: "main",
+    selectedPlaylistId: null,
+    searchQuery: "",
+};
+
+const audio = new Audio();
+
+const elements = {
+    // Навигация
+    mainBtn: document.getElementById("main-btn") as HTMLButtonElement,
+    mediaLibraryBtn: document.getElementById("media-libary-btn") as HTMLButtonElement,
+    playlistsBtn: document.getElementById("playlists-btn") as HTMLButtonElement,
+
+    // Вьюшки
+    viewMain: document.getElementById("view-main") as HTMLElement,
+    viewMediaLibrary: document.getElementById("view-media-library") as HTMLElement,
+    viewPlaylists: document.getElementById("view-playlists") as HTMLElement,
+    viewPlaylistDetail: document.getElementById("view-playlist-detail") as HTMLElement,
+
+    // Кнопки добавления / создания
+    addTrackBtn: document.getElementById("add-track-btn") as HTMLButtonElement,
+    libraryAddTrackBtn: document.getElementById("library-add-track-btn") as HTMLButtonElement,
+    emptyScanBtn: document.getElementById("empty-scan-btn") as HTMLButtonElement,
+    createPlaylistBtn: document.getElementById("create-playlist-btn") as HTMLButtonElement,
+    playlistsCreateBtn: document.getElementById("playlists-create-btn") as HTMLButtonElement,
+    emptyCreatePlaylistBtn: document.getElementById("empty-create-playlist-btn") as HTMLButtonElement,
+
+    // Списки и Empty-states
+    mediaEmptyState: document.getElementById("media-empty-state") as HTMLElement,
+    trackListContainer: document.getElementById("track-list-container") as HTMLElement,
+    playlistsEmptyState: document.getElementById("playlists-empty-state") as HTMLElement,
+    playlistsGrid: document.querySelector("#view-playlists .cards-grid") as HTMLElement,
+    playlistTrackListContainer: document.getElementById("playlist-track-list-container") as HTMLElement,
+
+    // Управление плейлистом
+    playlistDetailTitle: document.getElementById("playlist-detail-title") as HTMLElement,
+    playlistDetailCount: document.getElementById("playlist-detail-count") as HTMLElement,
+    deletePlaylistBtn: document.getElementById("delete-playlist-btn") as HTMLButtonElement,
+    playlistBackBtn: document.getElementById("playlist-back-btn") as HTMLButtonElement,
+
+    // Плеер-бар
+    playerTitle: document.getElementById("player-title") as HTMLElement,
+    playerArtist: document.getElementById("player-artist") as HTMLElement,
+    playerCover: document.getElementById("player-cover") as HTMLImageElement,
+    sidebarTitle: document.getElementById("sidebar-title") as HTMLElement,
+    sidebarArtist: document.getElementById("sidebar-artist") as HTMLElement,
+    sidebarCover: document.getElementById("sidebar-cover") as HTMLImageElement,
+    playBtn: document.getElementById("play-btn") as HTMLButtonElement,
+    prevBtn: document.getElementById("prev-btn") as HTMLButtonElement,
+    nextBtn: document.getElementById("next-btn") as HTMLButtonElement,
+    progressSlider: document.getElementById("progress-slider") as HTMLInputElement,
+    progressTooltip: document.getElementById("progress-tooltip") as HTMLElement,
+    volumeSlider: document.getElementById("volume-slider") as HTMLInputElement,
+    currentTime: document.getElementById("current-time") as HTMLElement,
+    totalTime: document.getElementById("total-time") as HTMLElement,
+
+    // Модальные окна
+    createPlaylistModal: document.getElementById("create-playlist-modal") as HTMLElement,
+    closeModalBtn: document.getElementById("close-modal-btn") as HTMLButtonElement,
+    submitPlaylistBtn: document.getElementById("submit-playlist-btn") as HTMLButtonElement,
+    playlistNameInput: document.getElementById("playlist-name-input") as HTMLInputElement,
+
+    addToPlaylistModal: document.getElementById("add-to-playlist-modal") as HTMLElement,
+    closeAddPlaylistModalBtn: document.getElementById("close-add-playlist-modal-btn") as HTMLButtonElement,
+    modalPlaylistsList: document.getElementById("modal-playlists-list") as HTMLElement,
+    modalPlaylistsEmpty: document.getElementById("modal-playlists-empty") as HTMLElement,
+    modalCreatePlaylistBtn: document.getElementById("modal-create-playlist-btn") as HTMLButtonElement,
+
+    // Поиск
+    searchInput: document.querySelector(".search-input") as HTMLInputElement,
+    searchDropdown: document.getElementById("search-dropdown") as HTMLElement,
+    searchResultsList: document.getElementById("search-results-list") as HTMLElement,
+};
+
 function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    if (isNaN(seconds) || seconds <= 0) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
-// Переключение активного экрана и подсветка кнопки в сайдбаре
-function switchView(targetViewId: string, clickedBtn?: HTMLElement | null): void {
-  document.querySelectorAll('.view-section').forEach((section) => {
-    section.classList.remove('active');
-  });
+function updateProgressDisplay(time = audio.currentTime) {
+    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+    const currentTime = Number.isFinite(time) && duration > 0 ? Math.min(Math.max(time, 0), duration) : 0;
+    const sliderMax = Math.max(1, Math.floor(duration));
 
-  document.querySelectorAll('.sidebar-left .btn-ctrl').forEach((btn) => {
-    btn.classList.remove('active');
-  });
-
-  const targetSection = document.getElementById(targetViewId);
-  if (targetSection) {
-    targetSection.classList.add('active');
-  }
-
-  if (clickedBtn) {
-    clickedBtn.classList.add('active');
-  }
+    elements.currentTime.textContent = formatTime(currentTime);
+    elements.totalTime.textContent = formatTime(duration);
+    elements.progressSlider.max = sliderMax.toString();
+    elements.progressSlider.value = Math.min(Math.floor(currentTime), sliderMax).toString();
+    elements.progressSlider.style.setProperty("--progress", `${duration > 0 ? (currentTime / duration) * 100 : 0}%`);
 }
 
-// Вызов команды Tauri для выбора файла и получения его метаданных
-async function openAudioPicker(): Promise<Track | null> {
-  try {
-    const track = await invoke<Track | null>('pick_files');
-    if (track) {
-      console.log('Добавлен трек:', track);
-      return track;
-    }
-    return null;
-  } catch (err) {
-    console.error('Ошибка при вызове pick_files:', err);
-    return null;
-  }
+function updateProgressTooltip(time: number) {
+    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+    const previewTime = duration > 0 ? Math.min(Math.max(time, 0), duration) : 0;
+    const percentage = duration > 0 ? (previewTime / duration) * 100 : 0;
+
+    elements.progressTooltip.textContent = formatTime(previewTime);
+    elements.progressTooltip.style.left = `${Math.min(95, Math.max(5, percentage))}%`;
 }
 
-// Инициализация при полной загрузке DOM
-document.addEventListener('DOMContentLoaded', () => {
-  // Получение элементов модального окна плейлистов
-  const modal = document.getElementById('create-playlist-modal');
-  const playlistInput = document.getElementById('playlist-name-input') as HTMLInputElement | null;
-  const btnCreateMain = document.getElementById('create-playlist-btn');
-  const btnCreateEmpty = document.getElementById('empty-create-playlist-btn');
-  const btnCloseModal = document.getElementById('close-modal-btn');
-  const btnSubmitModal = document.getElementById('submit-playlist-btn');
+function updateMarquee(element: HTMLElement) {
+    element.classList.remove("marquee");
+    element.style.removeProperty("--marquee-distance");
+    element.style.removeProperty("--marquee-duration");
 
-  // Получение элементов сетки плейлистов
-  const playlistsEmptyState = document.getElementById('playlists-empty-state');
-  const playlistsGrid = document.querySelector('#view-playlists .cards-grid') as HTMLElement | null;
+    const overflow = element.scrollWidth - element.clientWidth;
+    if (overflow <= 1) return;
 
-  // Получение элементов плеера и управления
-  const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement | null;
-  const progressSlider = document.getElementById('progress-slider') as HTMLInputElement | null;
-  const progressTooltip = document.getElementById('progress-tooltip') as HTMLDivElement | null;
-  const btnEmptyScan = document.getElementById('empty-scan-btn');
-  const btnAddTrack = document.getElementById('add-track-btn');
-  const addBtn = document.getElementById('add-btn') as HTMLButtonElement | null;
+    element.style.setProperty("--marquee-distance", `${overflow}px`);
+    element.style.setProperty("--marquee-duration", `${Math.max(8, overflow / 24)}s`);
+    element.classList.add("marquee");
+}
 
-  // Кнопки навигации сайдбара
-  const mainBtn = document.getElementById('main-btn');
-  const mediaBtn = document.getElementById('media-libary-btn');
-  const playlistsBtn = document.getElementById('playlists-btn');
+function updateTrackTextMarquee() {
+    updateMarquee(elements.playerTitle);
+    updateMarquee(elements.playerArtist);
+}
 
-  // Временная заглушка длительности текущего трека
-  const TOTAL_DURATION = 204;
+function switchView(view: AppState["activeView"]) {
+    state.activeView = view;
 
-  // Открытие модального окна создания плейлиста
-  function openModal(): void {
-    if (modal && playlistInput) {
-      modal.classList.remove('hidden');
-      playlistInput.value = '';
-      playlistInput.focus();
+    [elements.viewMain, elements.viewMediaLibrary, elements.viewPlaylists, elements.viewPlaylistDetail].forEach((sec) => sec?.classList.remove("active"));
+    [elements.mainBtn, elements.mediaLibraryBtn, elements.playlistsBtn].forEach((btn) => btn?.classList.remove("active"));
+
+    if (view === "main") {
+        elements.viewMain?.classList.add("active");
+        elements.mainBtn?.classList.add("active");
+    } else if (view === "media-library") {
+        elements.viewMediaLibrary?.classList.add("active");
+        elements.mediaLibraryBtn?.classList.add("active");
+        renderMediaLibrary();
+    } else if (view === "playlists") {
+        elements.viewPlaylists?.classList.add("active");
+        elements.playlistsBtn?.classList.add("active");
+        renderPlaylists();
+    } else if (view === "playlist-detail") {
+        elements.viewPlaylistDetail?.classList.add("active");
+        renderPlaylistDetail();
     }
-  }
+}
 
-  // Закрытие модального окна
-  function closeModal(): void {
-    if (modal) {
-      modal.classList.add('hidden');
+async function addTrackHandler() {
+    try {
+        const selected = await open({
+            multiple: true,
+            filters: [{ name: "Audio", extensions: ["mp3", "wav", "flac", "ogg", "m4a"] }],
+        });
+
+        if (!selected) return;
+        const paths = Array.isArray(selected) ? selected : [selected];
+
+        for (const filePath of paths) {
+            const fileName = filePath.split(/[/\\]/).pop() || "Unknown Track";
+            const title = fileName.substring(0, fileName.lastIndexOf(".")) || fileName;
+            const assetUrl = convertFileSrc(filePath);
+
+            const track: Track = {
+                id: crypto.randomUUID(),
+                title: title,
+                artist: "Неизвестный исполнитель",
+                path: filePath,
+                src: assetUrl,
+                duration: 0,
+            };
+
+            state.tracks.push(track);
+        }
+
+        if (state.activeView === "media-library") renderMediaLibrary();
+        if (state.activeView === "main") switchView("media-library");
+    } catch (err) {
+        console.error("Ошибка при выборе файла:", err);
     }
-  }
+}
 
-  // Добавление нового плейлиста в список
-  function createPlaylist(): void {
-    if (!playlistInput) return;
-    const title = playlistInput.value.trim();
-    if (title) {
-      playlists.push({
-        id: Date.now().toString(),
-        title,
-        trackCount: 0,
-      });
-
-      closeModal();
-      renderPlaylists();
-    }
-  }
-
-  // Отрисовка карточек плейлистов или пустого состояния
-  function renderPlaylists(): void {
-    if (!playlistsEmptyState || !playlistsGrid) return;
-
-    if (playlists.length === 0) {
-      playlistsEmptyState.classList.remove('hidden');
-      playlistsGrid.classList.add('hidden');
-      playlistsGrid.innerHTML = '';
+function renderMediaLibrary() {
+    if (state.tracks.length === 0) {
+        elements.mediaEmptyState?.classList.remove("hidden");
+        elements.trackListContainer.style.display = "none";
     } else {
-      playlistsEmptyState.classList.add('hidden');
-      playlistsGrid.classList.remove('hidden');
-
-      playlistsGrid.innerHTML = playlists
-        .map(
-          (pl) => `
-          <div class="media-card" data-id="${pl.id}">
-            <div class="card-cover-wrapper">
-              <div class="card-cover" style="background: #282828; display:flex; align-items:center; justify-content:center; height: 100%;">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px;">
-                  <line x1="8" y1="6" x2="21" y2="6"></line>
-                  <line x1="8" y1="12" x2="21" y2="12"></line>
-                  <line x1="8" y1="18" x2="21" y2="18"></line>
-                </svg>
-              </div>
-              <button class="card-play-btn">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="6,4 20,12 6,20" />
-                </svg>
-              </button>
-            </div>
-            <div class="card-title">${pl.title}</div>
-            <div class="card-artist">${pl.trackCount} треков</div>
-          </div>
-        `
-        )
-        .join('');
+        elements.mediaEmptyState?.classList.add("hidden");
+        elements.trackListContainer.style.display = "block";
+        renderTrackList(elements.trackListContainer, state.tracks, "library");
     }
-  }
+}
 
-  // Настройка слайдера громкости
-  if (volumeSlider) {
-    updateSlider(volumeSlider);
-    volumeSlider.addEventListener('input', () => updateSlider(volumeSlider));
-  }
+function renderTrackList(container: HTMLElement, tracks: Track[], context: "library" | "playlist") {
+    const header = `
+    <div class="track-list-header">
+      <span class="col-num">#</span>
+      <span class="col-title">Название</span>
+      <span class="col-artist">Исполнитель</span>
+      <span class="col-duration">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </span>
+      <span class="col-actions"></span>
+    </div>`;
 
-  // Настройка прогресс-бара и всплывающего таймера
-  if (progressSlider) {
-    const handleProgressInput = () => {
-      updateSlider(progressSlider);
+    const rows = tracks
+        .map((track, idx) => {
+            const isCurrent = state.currentTrackId === track.id;
+            const isPlaying = isCurrent && state.isPlaying;
+            const actionButton =
+                context === "playlist"
+                    ? `<button class="btn-ctrl remove-from-pl-btn" data-id="${track.id}" title="Удалить из плейлиста" aria-label="Удалить ${track.title} из плейлиста">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>`
+                : `<button class="btn-ctrl add-to-pl-btn" data-id="${track.id}" title="Добавить в плейлист" aria-label="Добавить ${track.title} в плейлист">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>`;
 
-      if (progressTooltip) {
-        const val = Number(progressSlider.value);
-        const max = Number(progressSlider.max) || 100;
-        const percent = (val / max) * 100;
+            return `
+      <div class="track-row ${isCurrent ? "active" : ""} ${isPlaying ? "playing" : ""}" data-id="${track.id}">
+        <span class="col-num">${idx + 1}</span>
+        <span class="col-title">${track.title}</span>
+        <span class="col-artist">${track.artist}</span>
+        <span class="col-duration">${formatTime(track.duration)}</span>
+        <span class="col-actions">${actionButton}</span>
+      </div>`;
+        })
+        .join("");
 
-        progressTooltip.style.left = `${percent}%`;
-        progressTooltip.textContent = formatTime((val / max) * TOTAL_DURATION);
-      }
-    };
+    container.innerHTML = header + rows;
 
-    handleProgressInput();
-    progressSlider.addEventListener('input', handleProgressInput);
-  }
-
-  // Привязка вызова файлового диалога к кнопкам
-  btnEmptyScan?.addEventListener('click', async () => {
-    await openAudioPicker();
-  });
-
-  btnAddTrack?.addEventListener('click', async () => {
-    await openAudioPicker();
-  });
-
-  // Анимация и логика кнопки добавления в медиатеку
-  if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      const isAdded = addBtn.classList.toggle('added');
-      addBtn.title = isAdded ? 'Удалить из медиатеки' : 'Добавить';
-
-      const currentIcon = addBtn.querySelector(isAdded ? '.icon-check' : '.icon-plus');
-
-      if (currentIcon) {
-        currentIcon.classList.add('icon-animating');
-        currentIcon.addEventListener(
-          'animationend',
-          () => {
-            currentIcon.classList.remove('icon-animating');
-          },
-          { once: true }
-        );
-      }
+    // Навешивание событий на строки
+    container.querySelectorAll(".track-row").forEach((row) => {
+        row.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest("button")) return;
+            const trackId = row.getAttribute("data-id");
+            if (trackId) playTrack(trackId);
+        });
     });
-  }
 
-  // Настройка кликов по навигации в левой панели
-  mainBtn?.addEventListener('click', (e) => switchView('view-main', e.currentTarget as HTMLElement));
-  mediaBtn?.addEventListener('click', (e) => switchView('view-media-library', e.currentTarget as HTMLElement));
-  playlistsBtn?.addEventListener('click', (e) => switchView('view-playlists', e.currentTarget as HTMLElement));
+    // Действие кнопки зависит от того, где отображается список.
+    container.querySelectorAll(".add-to-pl-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const trackId = btn.getAttribute("data-id");
+            if (trackId) openAddToPlaylistModal(trackId);
+        });
+    });
 
-  // Установка стартового экрана (Главная)
-  switchView('view-main', mainBtn);
+    container.querySelectorAll(".remove-from-pl-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const trackId = btn.getAttribute("data-id");
+            const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
+            if (!trackId || !playlist) return;
 
-  // Настройка вызовов модального окна плейлистов
-  btnCreateMain?.addEventListener('click', openModal);
-  btnCreateEmpty?.addEventListener('click', openModal);
-  btnCloseModal?.addEventListener('click', closeModal);
+            playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
+            renderPlaylistDetail();
+            renderPlaylists();
+        });
+    });
+}
 
-  // Закрытие модалки при клике на затемнённый фон
-  modal?.addEventListener('click', (e) => {
-    if (e.target === modal) closeModal();
-  });
+function playTrack(trackId: string) {
+    const track = state.tracks.find((t) => t.id === trackId);
+    if (!track) return;
 
-  // Подтверждение создания плейлиста кнопкой или нажатием Enter
-  btnSubmitModal?.addEventListener('click', createPlaylist);
+    if (state.currentTrackId !== trackId) {
+        state.currentTrackId = trackId;
+        audio.src = track.src;
+        updateTrackMetadata(track);
+        updateProgressDisplay();
+        updateProgressTooltip(0);
+    }
 
-  playlistInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') createPlaylist();
-  });
+    audio.play();
+    state.isPlaying = true;
+    updatePlayButtonIcon();
+    renderActiveTrackList();
+}
 
-  // Первичный рендер плейлистов при старте
-  renderPlaylists();
+function updateTrackMetadata(track: Track) {
+    const cover = track.cover || "./src/assets/media_library.jpg";
+
+    elements.playerTitle.textContent = track.title;
+    elements.playerArtist.textContent = track.artist;
+    elements.sidebarTitle.textContent = track.title;
+    elements.sidebarArtist.textContent = track.artist;
+    requestAnimationFrame(updateTrackTextMarquee);
+
+    [elements.playerCover, elements.sidebarCover].forEach((image) => {
+        image.src = cover;
+        image.alt = track.title;
+    });
+}
+
+function renderActiveTrackList() {
+    if (state.activeView === "media-library") renderMediaLibrary();
+    if (state.activeView === "playlist-detail") renderPlaylistDetail();
+}
+
+function togglePlay() {
+    if (!state.currentTrackId && state.tracks.length > 0) {
+        playTrack(state.tracks[0].id);
+        return;
+    }
+    if (!state.currentTrackId) return;
+
+    if (state.isPlaying) {
+        audio.pause();
+        state.isPlaying = false;
+    } else {
+        audio.play();
+        state.isPlaying = true;
+    }
+    updatePlayButtonIcon();
+    renderActiveTrackList();
+}
+
+function updatePlayButtonIcon() {
+    elements.playBtn.innerHTML = state.isPlaying
+        ? `<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
+        : `<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20" /></svg>`;
+}
+
+function playNextTrack() {
+    if (!state.tracks.length) return;
+    const currIdx = state.tracks.findIndex((t) => t.id === state.currentTrackId);
+    const nextIdx = (currIdx + 1) % state.tracks.length;
+    playTrack(state.tracks[nextIdx].id);
+}
+
+function playPrevTrack() {
+    if (!state.tracks.length) return;
+    const currIdx = state.tracks.findIndex((t) => t.id === state.currentTrackId);
+    const prevIdx = (currIdx - 1 + state.tracks.length) % state.tracks.length;
+    playTrack(state.tracks[prevIdx].id);
+}
+
+function createPlaylist(title: string) {
+    if (!title.trim()) return;
+    const newPlaylist: Playlist = {
+        id: crypto.randomUUID(),
+        title: title.trim(),
+        trackIds: [],
+    };
+    if (trackToAddToPlaylist) {
+        newPlaylist.trackIds.push(trackToAddToPlaylist);
+        trackToAddToPlaylist = null;
+    }
+    state.playlists.push(newPlaylist);
+    closeModal(elements.createPlaylistModal);
+    if (state.activeView === "playlists") renderPlaylists();
+}
+
+function renderPlaylists() {
+    if (state.playlists.length === 0) {
+        elements.playlistsEmptyState?.classList.remove("hidden");
+        elements.playlistsGrid.innerHTML = "";
+    } else {
+        elements.playlistsEmptyState?.classList.add("hidden");
+        elements.playlistsGrid.innerHTML = state.playlists
+            .map(
+                (pl) => `
+      <div class="media-card" data-playlist-id="${pl.id}">
+        <div class="card-cover-wrapper">
+          <div class="card-cover" style="background:#282828; display:flex; align-items:center; justify-content:center;">🎵</div>
+        </div>
+        <div class="card-title">${pl.title}</div>
+        <div class="card-artist">${pl.trackIds.length} треков</div>
+      </div>
+    `,
+            )
+            .join("");
+
+        elements.playlistsGrid.querySelectorAll(".media-card").forEach((card) => {
+            card.addEventListener("click", () => {
+                const id = card.getAttribute("data-playlist-id");
+                if (id) {
+                    state.selectedPlaylistId = id;
+                    switchView("playlist-detail");
+                }
+            });
+        });
+    }
+}
+
+function renderPlaylistDetail() {
+    const playlist = state.playlists.find((p) => p.id === state.selectedPlaylistId);
+    if (!playlist) return;
+
+    elements.playlistDetailTitle.textContent = playlist.title;
+    elements.playlistDetailCount.textContent = `${playlist.trackIds.length} треков`;
+
+    const playlistTracks = state.tracks.filter((t) => playlist.trackIds.includes(t.id));
+    renderTrackList(elements.playlistTrackListContainer, playlistTracks, "playlist");
+}
+
+function openModal(modal: HTMLElement) {
+    modal.classList.remove("hidden");
+}
+
+function closeModal(modal: HTMLElement) {
+    modal.classList.add("hidden");
+}
+
+let trackToAddToPlaylist: string | null = null;
+function openAddToPlaylistModal(trackId: string) {
+    trackToAddToPlaylist = trackId;
+    elements.modalPlaylistsList.innerHTML = state.playlists
+        .map(
+            (pl) => `
+    <button class="action-card modal-pl-item" data-id="${pl.id}" style="width: 100%; margin-bottom: 8px;">
+      <span>${pl.title}</span>
+    </button>
+  `,
+        )
+        .join("");
+
+    if (state.playlists.length === 0) {
+        elements.modalPlaylistsList.classList.add("hidden");
+        elements.modalPlaylistsEmpty.classList.remove("hidden");
+        openModal(elements.addToPlaylistModal);
+        return;
+    }
+
+    elements.modalPlaylistsEmpty.classList.add("hidden");
+    elements.modalPlaylistsList.classList.remove("hidden");
+    elements.modalPlaylistsList.querySelectorAll(".modal-pl-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const plId = btn.getAttribute("data-id");
+            if (plId && trackToAddToPlaylist) {
+                const pl = state.playlists.find((p) => p.id === plId);
+                if (pl && !pl.trackIds.includes(trackToAddToPlaylist)) {
+                    pl.trackIds.push(trackToAddToPlaylist);
+                }
+                closeModal(elements.addToPlaylistModal);
+                trackToAddToPlaylist = null;
+            }
+        });
+    });
+
+    openModal(elements.addToPlaylistModal);
+}
+
+function initEvents() {
+    window.addEventListener("resize", updateTrackTextMarquee);
+
+    // Навигация
+    elements.mainBtn?.addEventListener("click", () => switchView("main"));
+    elements.mediaLibraryBtn?.addEventListener("click", () => switchView("media-library"));
+    elements.playlistsBtn?.addEventListener("click", () => switchView("playlists"));
+
+    // Добавление треков
+    elements.addTrackBtn?.addEventListener("click", addTrackHandler);
+    elements.libraryAddTrackBtn?.addEventListener("click", addTrackHandler);
+    elements.emptyScanBtn?.addEventListener("click", addTrackHandler);
+
+    // Создание плейлистов
+    const openPlModal = () => openModal(elements.createPlaylistModal);
+    elements.createPlaylistBtn?.addEventListener("click", openPlModal);
+    elements.playlistsCreateBtn?.addEventListener("click", openPlModal);
+    elements.emptyCreatePlaylistBtn?.addEventListener("click", openPlModal);
+    elements.submitPlaylistBtn?.addEventListener("click", () => {
+        createPlaylist(elements.playlistNameInput.value);
+        elements.playlistNameInput.value = "";
+    });
+
+    elements.closeAddPlaylistModalBtn?.addEventListener("click", () => {
+        closeModal(elements.addToPlaylistModal);
+        trackToAddToPlaylist = null;
+    });
+
+    elements.modalCreatePlaylistBtn?.addEventListener("click", () => {
+        closeModal(elements.addToPlaylistModal);
+        openModal(elements.createPlaylistModal);
+        elements.playlistNameInput.focus();
+    });
+    elements.closeModalBtn?.addEventListener("click", () => {
+        closeModal(elements.createPlaylistModal);
+        trackToAddToPlaylist = null;
+    });
+
+    // Плейлист Detail Навигация/Удаление
+    elements.playlistBackBtn?.addEventListener("click", () => switchView("playlists"));
+    elements.deletePlaylistBtn?.addEventListener("click", () => {
+        if (state.selectedPlaylistId) {
+            state.playlists = state.playlists.filter((p) => p.id !== state.selectedPlaylistId);
+            switchView("playlists");
+        }
+    });
+
+    // Воспроизведение
+    elements.playBtn?.addEventListener("click", togglePlay);
+    elements.nextBtn?.addEventListener("click", playNextTrack);
+    elements.prevBtn?.addEventListener("click", playPrevTrack);
+
+    // События Audio
+    audio.addEventListener("loadedmetadata", () => {
+        const currentTrack = state.tracks.find((t) => t.id === state.currentTrackId);
+        if (currentTrack) currentTrack.duration = audio.duration;
+        updateProgressDisplay();
+        renderActiveTrackList();
+    });
+
+    audio.addEventListener("timeupdate", () => {
+        updateProgressDisplay();
+    });
+
+    audio.addEventListener("ended", playNextTrack);
+
+    elements.progressSlider?.addEventListener("input", () => {
+        const seekTime = Number(elements.progressSlider.value);
+        audio.currentTime = seekTime;
+        updateProgressDisplay(seekTime);
+        updateProgressTooltip(seekTime);
+    });
+
+    elements.progressSlider?.addEventListener("pointermove", (event) => {
+        const bounds = elements.progressSlider.getBoundingClientRect();
+        const progress = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
+        const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+        updateProgressTooltip(progress * duration);
+    });
+
+    elements.volumeSlider?.addEventListener("input", () => {
+        audio.volume = Number(elements.volumeSlider.value) / 100;
+    });
+
+    // Поиск
+    elements.searchInput?.addEventListener("input", (e) => {
+        const val = (e.target as HTMLInputElement).value.toLowerCase().trim();
+        if (!val) {
+            elements.searchDropdown?.classList.add("hidden");
+            return;
+        }
+
+        const matched = state.tracks.filter((t) => t.title.toLowerCase().includes(val) || t.artist.toLowerCase().includes(val));
+
+        if (matched.length > 0) {
+            elements.searchDropdown?.classList.remove("hidden");
+            elements.searchResultsList.innerHTML = matched
+                .map(
+                    (t) => `
+        <div class="search-item" data-id="${t.id}" style="padding: 8px; cursor: pointer;">
+          <div>${t.title}</div>
+          <small style="opacity: 0.7">${t.artist}</small>
+        </div>
+      `,
+                )
+                .join("");
+
+            elements.searchResultsList.querySelectorAll(".search-item").forEach((item) => {
+                item.addEventListener("click", () => {
+                    const id = item.getAttribute("data-id");
+                    if (id) playTrack(id);
+                    elements.searchDropdown?.classList.add("hidden");
+                });
+            });
+        } else {
+            elements.searchDropdown?.classList.add("hidden");
+        }
+    });
+}
+
+// Запуск приложения
+document.addEventListener("DOMContentLoaded", () => {
+    initEvents();
+    switchView("main");
 });

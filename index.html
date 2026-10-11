@@ -14,12 +14,17 @@
         <h1 class="app-title">Music Player</h1>
 
         <!-- Поисковая строка -->
-        <div class="search-container">
+        <div class="search-container" style="position: relative;">
           <svg class="search-icon icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input type="text" class="search-input" placeholder="Поиск треков, плейлистов..." />
+
+          <!-- Выпадающий виджет результатов -->
+          <div class="search-dropdown hidden" id="search-dropdown">
+            <div class="search-results-list" id="search-results-list"></div>
+          </div>
         </div>
 
         <div class="top-panel-right"></div>
@@ -74,20 +79,6 @@
           <h2 class="section-title">Главная</h2>
 
           <div class="quick-actions">
-            <button class="action-card" id="scan-media-btn">
-              <div class="action-icon">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  <line x1="12" y1="11" x2="12" y2="17"></line>
-                  <line x1="9" y1="14" x2="15" y2="14"></line>
-                </svg>
-              </div>
-              <div class="action-info">
-                <h3>Открыть папку</h3>
-                <p>Сканировать локальные треки</p>
-              </div>
-            </button>
-
             <button class="action-card" id="add-track-btn">
               <div class="action-icon">
                 <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -160,15 +151,38 @@
                 <div class="card-title">Медиатека</div>
                 <div class="card-artist">Все треки</div>
               </div>
+
+              <!-- Карточка Избранное -->
+              <div class="media-card">
+                <div class="card-cover-wrapper">
+                  <img src="./src/assets/media_library.jpg" alt="Медиатека" class="card-cover" />
+                  <button class="card-play-btn">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6,4 20,12 6,20" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="card-title">Избранное</div>
+                <div class="card-artist">Любимые треки</div>
+              </div>
             </div>
           </div>
         </section>
 
         <!-- Секция: Медиатека -->
         <section class="media-section view-section" id="view-media-library">
-          <h2 class="section-title">Медиатека</h2>
+          <div class="section-header-row">
+            <h2 class="section-title">Медиатека</h2>
+            <button class="action-card add-track-top-btn" id="library-add-track-btn">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Добавить трек</span>
+            </button>
+          </div>
 
-          <div class="empty-state" id="media-empty-state">
+          <div class="empty-state hidden" id="media-empty-state">
             <div class="empty-icon">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
@@ -185,14 +199,35 @@
             </button>
           </div>
 
-          <div class="cards-grid">
-            <!-- Карточки медиафайлов -->
+          <div class="track-list" id="track-list-container">
+            <div class="track-list-header">
+              <span class="col-num">#</span>
+              <span class="col-title">Название</span>
+              <span class="col-artist">Исполнитель</span>
+              <span class="col-duration">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </span>
+              <span class="col-actions"></span>
+            </div>
           </div>
         </section>
 
         <!-- Секция: Плейлисты -->
         <section class="playlists-section view-section" id="view-playlists">
-          <h2 class="section-title">Плейлисты</h2>
+          <div class="section-header-row">
+            <h2 class="section-title">Плейлисты</h2>
+            <button class="action-card add-track-top-btn" id="playlists-create-btn">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Создать плейлист</span>
+            </button>
+          </div>
+
           <div class="empty-state" id="playlists-empty-state">
             <div class="empty-icon">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -216,50 +251,81 @@
             </button>
           </div>
 
-          <div class="cards-grid">
-            <!-- Карточки плейлистов -->
-          </div>
+          <div class="cards-grid"></div>
         </section>
 
+        <!-- Просмотр конкретного плейлиста -->
+        <section class="playlist-detail-section view-section" id="view-playlist-detail">
+          <div class="playlist-detail-header">
+            <button class="btn-ctrl back-btn" id="playlist-back-btn" title="Назад">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+            </button>
+            <div class="playlist-info-meta">
+              <h2 class="section-title" id="playlist-detail-title">Название плейлиста</h2>
+              <span class="playlist-track-count" id="playlist-detail-count">0 треков</span>
+            </div>
+            <button class="btn-danger-icon" id="delete-playlist-btn" title="Удалить плейлист">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="track-list" id="playlist-track-list-container">
+            <div class="track-list-header">
+              <span class="col-num">#</span>
+              <span class="col-title">Название</span>
+              <span class="col-artist">Исполнитель</span>
+              <span class="col-duration">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </span>
+              <span class="col-actions"></span>
+            </div>
+          </div>
+        </section>
       </main>
 
       <!-- Боковая панель с информацией (справа) -->
       <aside class="sidebar-right">
         <div class="sidebar-card">
-          <div class="sidebar-heading-right">Плейлист</div>
+          <div class="sidebar-heading-right">Сейчас играет</div>
     
           <div class="sidebar-cover-wrapper">
-            <img class="sidebar-cover" src="./src/assets/dekma.jpeg" alt="ПОНЯТЬ" />
+            <img class="sidebar-cover" id="sidebar-cover" src="./src/assets/media_library.jpg" alt="" />
           </div>
 
           <div class="sidebar-meta">
-            <h2 class="sidebar-title">ПОНЯТЬ</h2>
-            <p class="sidebar-artist">ВУЛЬФ, dekma</p>
+            <h2 class="sidebar-title" id="sidebar-title">Трек не выбран</h2>
+            <p class="sidebar-artist" id="sidebar-artist">Выберите трек для воспроизведения</p>
           </div>
         </div>
       </aside>
 
       <!-- Нижнее окно / Плеер-бар -->
       <div class="player-bar">
-        <!-- Информация о треке -->
         <div class="track-info">
           <div class="track-cover-wrapper">
-            <img src="./src/assets/dekma.jpeg" alt="ПОНЯТЬ" class="track-cover-img" id="player-cover" />
+            <img src="./src/assets/media_library.jpg" alt="" class="track-cover-img" id="player-cover" />
           </div>
           <div class="track-text">
-            <div class="track-title">ПОНЯТЬ</div>
-            <div class="track-artist">ВУЛЬФ, dekma</div>
+            <div class="track-title" id="player-title">Трек не выбран</div>
+            <div class="track-artist" id="player-artist">Выберите трек для воспроизведения</div>
           </div>
           
           <div class="track-actions">
-            <!-- Добавить/удалить из медиатеки (+ / галочка) -->
             <button class="btn-ctrl" id="add-btn" title="Добавить в медиатеку">
               <svg class="icon-svg icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="16"></line>
                 <line x1="8" y1="12" x2="16" y2="12"></line>
               </svg>
-
               <svg class="icon-svg icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
@@ -267,7 +333,6 @@
           </div>
         </div>
 
-        <!-- Управление и прогресс слайдера -->
         <div class="player-center">
           <div class="controls">
             <button class="btn-ctrl" id="prev-btn">
@@ -297,11 +362,10 @@
               <input type="range" class="progress-bar" id="progress-slider" min="0" max="100" value="0" />
             </div>
 
-            <span class="time-text" id="total-time">3:24</span>
+            <span class="time-text" id="total-time">0:00</span>
           </div>
         </div>
 
-        <!-- Звук -->
         <div class="volume-control">
           <span class="volume-icon">
             <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -313,7 +377,30 @@
           <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="80" />
         </div>
       </div>
-    
+
+      <!-- Модальное окно добавления в плейлист -->
+      <div class="modal-overlay hidden" id="add-to-playlist-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Добавить в плейлист</h3>
+            <button class="btn-ctrl" id="close-add-playlist-modal-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="modal-playlists-empty hidden" id="modal-playlists-empty">
+              <p>У вас пока нет плейлистов</p>
+              <button class="action-card" id="modal-create-playlist-btn">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Создать плейлист</span>
+              </button>
+            </div>
+            <div class="modal-playlists-list" id="modal-playlists-list"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Модальное окно создания плейлиста -->
       <div class="modal-overlay hidden" id="create-playlist-modal">
         <div class="modal-content">
