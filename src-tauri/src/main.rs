@@ -9,6 +9,8 @@ use std::{fs, path::Path, path::PathBuf};
 use tauri::Manager;
 use uuid::Uuid;
 
+const FAVORITES_PLAYLIST_ID: &str = "favorites";
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -21,6 +23,8 @@ fn main() {
             add_track_to_playlist,
             remove_track_from_playlist,
             get_playlists,
+            get_recently_played,
+            record_recently_played,
             delete_playlist,
             edit_metadata_playlist,
             get_player_config,
@@ -41,6 +45,7 @@ pub struct AppPaths {
     pub covers_path: PathBuf,
     pub library_path: PathBuf,
     pub config_path: PathBuf,
+    pub recent_path: PathBuf,
 }
 
 // Структура для работы с данными трека
@@ -94,6 +99,143 @@ pub struct Cover {
     pub path_file: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum RecentItemKind {
+    Track,
+    Playlist,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+struct RecentItem {
+    kind: RecentItemKind,
+    entity_id: String,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(tag = "source", content = "path", rename_all = "snake_case")]
+enum RecentCover {
+    Asset(String),
+    File(String),
+}
+
+#[derive(Serialize, Debug, Clone)]
+struct RecentEntry {
+    kind: RecentItemKind,
+    entity_id: String,
+    title: String,
+    subtitle: String,
+    cover: RecentCover,
+}
+
+const RECENT_ITEMS_LIMIT: usize = 5;
+const DEFAULT_TRACK_COVER: &str = "./src/assets/media_library.jpg";
+const DEFAULT_FAVORITES_COVER: &str = "./src/assets/favorites.jpg";
+
+// Добавить последний прослушанный трек
+fn push_recent_item(items: &mut Vec<RecentItem>, item: RecentItem) {
+    items.retain(|existing| existing.kind != item.kind || existing.entity_id != item.entity_id);
+    items.insert(0, item);
+    items.truncate(RECENT_ITEMS_LIMIT);
+}
+
+// Загрузить последние прослушанные треки
+fn load_recent_items(path: &Path) -> Result<Vec<RecentItem>, String> {
+    if !path.exists() {
+        save_recent_items(path, &[])?;
+        return Ok(Vec::new());
+    }
+
+    let contents = fs::read_to_string(path)
+        .map_err(|error| format!("Не удалось прочитать recently_played.json: {}", error))?;
+    serde_json::from_str(&contents)
+        .map_err(|error| format!("Не удалось разобрать recently_played.json: {}", error))
+}
+
+// Сохранение последних прослушанных треков
+fn save_recent_items(path: &Path, items: &[RecentItem]) -> Result<(), String> {
+    let contents = serde_json::to_string_pretty(items)
+        .map_err(|error| format!("Не удалось сериализовать историю: {}", error))?;
+    fs::write(path, contents)
+        .map_err(|error| format!("Не удалось сохранить recently_played.json: {}", error))
+}
+
+fn resolve_recent_items(items: &[RecentItem], app_data: &AppData, covers: &[Cover]) -> Vec<RecentEntry> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let (title, subtitle, cover_kind, default_cover) = match item.kind {
+                RecentItemKind::Track => {
+                    let track = app_data.tracks.iter().find(|track| track.id == item.entity_id)?;
+                    (
+                        track.title.clone(),
+                        track.artist.clone().unwrap_or_else(|| "Неизвестный исполнитель".to_string()),
+                        CoverKind::Track,
+                        DEFAULT_TRACK_COVER,
+                    )
+                }
+                RecentItemKind::Playlist => {
+                    let playlist = app_data.playlists.iter().find(|playlist| playlist.id == item.entity_id)?;
+                    let default_cover = if playlist.id == FAVORITES_PLAYLIST_ID {
+                        DEFAULT_FAVORITES_COVER
+                    } else {
+                        DEFAULT_TRACK_COVER
+                    };
+                    (
+                        playlist.name.clone(),
+                        format!("{} треков", playlist.id_tracks.len()),
+                        CoverKind::Playlist,
+                        default_cover,
+                    )
+                }
+            };
+            let cover = covers
+                .iter()
+                .find(|cover| cover.kind == cover_kind && cover.entity_id == item.entity_id)
+                .map(|cover| RecentCover::File(cover.path_file.clone()))
+                .unwrap_or_else(|| RecentCover::Asset(default_cover.to_string()));
+
+            Some(RecentEntry {
+                kind: item.kind,
+                entity_id: item.entity_id.clone(),
+                title,
+                subtitle,
+                cover,
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod recent_items_tests {
+    use super::{push_recent_item, RecentItem, RecentItemKind, RECENT_ITEMS_LIMIT};
+
+    #[test]
+    fn stack_obeys_limit_and_moves_replayed_item_to_front() {
+        let mut items = (0..RECENT_ITEMS_LIMIT)
+            .map(|index| RecentItem {
+                kind: RecentItemKind::Track,
+                entity_id: format!("track-{index}"),
+            })
+            .collect::<Vec<_>>();
+
+        push_recent_item(&mut items, RecentItem {
+            kind: RecentItemKind::Playlist,
+            entity_id: "playlist-1".to_string(),
+        });
+        push_recent_item(&mut items, RecentItem {
+            kind: RecentItemKind::Track,
+            entity_id: "track-0".to_string(),
+        });
+
+        assert_eq!(items.len(), RECENT_ITEMS_LIMIT);
+        assert_eq!(items[0].entity_id, "track-0");
+        assert_eq!(items.iter().filter(|item| item.entity_id == "track-0").count(), 1);
+        let oldest_track_id = format!("track-{}", RECENT_ITEMS_LIMIT - 1);
+        assert!(!items.iter().any(|item| item.entity_id == oldest_track_id));
+    }
+}
+
 // Единая структура корневого JSON файла
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AppData {
@@ -110,7 +252,7 @@ pub struct PlayerConfig {
 }
 
 impl Default for PlayerConfig {
-    fn default() -> Self {
+    fn default() -> Self { // дефолтные настройки конфига
         Self {
             current_track_id: None,
             position_secs: 0.0,
@@ -132,6 +274,7 @@ pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
     let covers_path = app_dir.join("covers.json");
     let library_path = app_dir.join("library.json");
     let config_path = app_dir.join("config.json");
+    let recent_path = app_dir.join("recently_played.json");
 
     fs::create_dir_all(&media_dir)
         .map_err(|e| format!("Ошибка создания папки media: {}", e))?;
@@ -146,6 +289,7 @@ pub fn get_all_paths(app: &tauri::AppHandle) -> Result<AppPaths, String> {
         covers_path,
         library_path,
         config_path,
+        recent_path,
     })
 }
 
@@ -168,6 +312,7 @@ fn save_covers(covers_path: &Path, covers: &[Cover]) -> Result<(), String> {
         .map_err(|error| format!("Ошибка записи covers.json: {}", error))
 }
 
+// Удаление обложки
 fn remove_covers_for_entity(covers_path: &Path, kind: CoverKind, entity_id: &str) -> Result<(), String> {
     let mut covers = load_covers(covers_path)?;
     let removed_paths: Vec<PathBuf> = covers
@@ -185,6 +330,7 @@ fn remove_covers_for_entity(covers_path: &Path, kind: CoverKind, entity_id: &str
     Ok(())
 }
 
+// Получить все обложки
 #[tauri::command]
 fn get_covers(app: tauri::AppHandle) -> Result<Vec<Cover>, String> {
     let paths = get_all_paths(&app)?;
@@ -195,8 +341,12 @@ fn get_covers(app: tauri::AppHandle) -> Result<Vec<Cover>, String> {
     Ok(covers)
 }
 
+// Поставить обложку
 #[tauri::command]
 fn set_cover(app: tauri::AppHandle, kind: CoverKind, entity_id: String, file_path: String) -> Result<Cover, String> {
+    if kind == CoverKind::Playlist && entity_id == FAVORITES_PLAYLIST_ID {
+        return Err("Обложку плейлиста «Избранное» нельзя изменить".to_string());
+    }
     let paths = get_all_paths(&app)?;
     let app_data = load_app_data(&paths.library_path);
     let entity_exists = match kind {
@@ -489,13 +639,66 @@ fn remove_track_from_playlist(app: tauri::AppHandle, playlist_id: String, track_
 #[tauri::command]
 fn get_playlists(app: tauri::AppHandle) -> Result<Vec<Playlist>, String> {
     let paths = get_all_paths(&app)?;
-    let app_data = load_app_data(&paths.library_path);
+    let mut app_data = load_app_data(&paths.library_path);
+    if !app_data.playlists.iter().any(|playlist| playlist.id == FAVORITES_PLAYLIST_ID) {
+        app_data.playlists.push(Playlist {
+            id: FAVORITES_PLAYLIST_ID.to_string(),
+            name: "Избранное".to_string(),
+            category: PlaylistCategory::Playlist,
+            id_tracks: Vec::new(),
+        });
+        save_app_data(&paths.library_path, &app_data)?;
+    }
     Ok(app_data.playlists)
+}
+
+#[tauri::command]
+fn get_recently_played(app: tauri::AppHandle) -> Result<Vec<RecentEntry>, String> {
+    let paths = get_all_paths(&app)?;
+    let app_data = load_app_data(&paths.library_path);
+    let mut items = load_recent_items(&paths.recent_path)?;
+    let original_len = items.len();
+    items.retain(|item| match item.kind {
+        RecentItemKind::Track => app_data.tracks.iter().any(|track| track.id == item.entity_id),
+        RecentItemKind::Playlist => app_data.playlists.iter().any(|playlist| playlist.id == item.entity_id),
+    });
+    items.truncate(RECENT_ITEMS_LIMIT);
+    if items.len() != original_len {
+        save_recent_items(&paths.recent_path, &items)?;
+    }
+    let covers = load_covers(&paths.covers_path)?;
+    Ok(resolve_recent_items(&items, &app_data, &covers))
+}
+
+#[tauri::command]
+fn record_recently_played(
+    app: tauri::AppHandle,
+    kind: RecentItemKind,
+    entity_id: String,
+) -> Result<Vec<RecentEntry>, String> {
+    let paths = get_all_paths(&app)?;
+    let app_data = load_app_data(&paths.library_path);
+    let entity_exists = match kind {
+        RecentItemKind::Track => app_data.tracks.iter().any(|track| track.id == entity_id),
+        RecentItemKind::Playlist => app_data.playlists.iter().any(|playlist| playlist.id == entity_id),
+    };
+    if !entity_exists {
+        return Err("Трек или плейлист для истории не найден".to_string());
+    }
+
+    let mut items = load_recent_items(&paths.recent_path)?;
+    push_recent_item(&mut items, RecentItem { kind, entity_id });
+    save_recent_items(&paths.recent_path, &items)?;
+    let covers = load_covers(&paths.covers_path)?;
+    Ok(resolve_recent_items(&items, &app_data, &covers))
 }
 
 // Удалить плейлист
 #[tauri::command]
 fn delete_playlist(app: tauri::AppHandle, playlist_id: String) -> Result<Vec<Playlist>, String> {
+    if playlist_id == FAVORITES_PLAYLIST_ID {
+        return Err("Плейлист «Избранное» нельзя удалить".to_string());
+    }
     let paths = get_all_paths(&app)?;
     let mut app_data = load_app_data(&paths.library_path);
 
@@ -506,6 +709,7 @@ fn delete_playlist(app: tauri::AppHandle, playlist_id: String) -> Result<Vec<Pla
     Ok(app_data.playlists)
 }
 
+// Загрузка конфига
 fn load_player_config(config_path: &Path) -> PlayerConfig {
     let config = fs::read_to_string(config_path)
         .ok()
@@ -527,12 +731,14 @@ fn load_player_config(config_path: &Path) -> PlayerConfig {
     }
 }
 
+// Получить конфиг пользователя
 #[tauri::command]
 fn get_player_config(app: tauri::AppHandle) -> Result<PlayerConfig, String> {
     let paths = get_all_paths(&app)?;
     Ok(load_player_config(&paths.config_path))
 }
 
+// Сохранить конфиг пользователя
 #[tauri::command]
 fn save_player_config(
     app: tauri::AppHandle,
@@ -561,6 +767,7 @@ fn save_player_config(
         .map_err(|error| format!("Ошибка записи config.json: {}", error))
 }
 
+// Редактирование метаданных трека
 #[tauri::command]
 fn edit_metadata_track(app: tauri::AppHandle, id: String, title: String, artist: String) -> Result<Track, String> {
     let paths = get_all_paths(&app)?;
@@ -618,8 +825,12 @@ fn edit_metadata_track(app: tauri::AppHandle, id: String, title: String, artist:
     Ok(updated_track)
 }
 
+// Редактирование метаданных плейлиста
 #[tauri::command]
 fn edit_metadata_playlist(app: tauri::AppHandle, id: String, name: String, category: PlaylistCategory) -> Result<Playlist, String> {
+    if id == FAVORITES_PLAYLIST_ID {
+        return Err("Плейлист «Избранное» нельзя переименовать".to_string());
+    }
     let paths = get_all_paths(&app)?;
     let mut app_data = load_app_data(&paths.library_path);
     let id = id.trim();

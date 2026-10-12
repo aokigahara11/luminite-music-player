@@ -3,6 +3,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 type PlaylistCategory = "EP" | "Альбом" | "Плейлист";
 type CoverKind = "track" | "playlist";
+type RecentItemKind = "track" | "playlist";
+const FAVORITES_PLAYLIST_ID = "favorites";
 
 interface Track {
     id: string;
@@ -20,6 +22,17 @@ interface Playlist {
     category: PlaylistCategory;
     trackIds: string[];
     cover?: string;
+}
+
+interface RecentEntry {
+    kind: RecentItemKind;
+    entity_id: string;
+    title: string;
+    subtitle: string;
+    cover: {
+        source: "asset" | "file";
+        path: string;
+    };
 }
 
 interface StoredCover {
@@ -54,6 +67,7 @@ interface PlayerConfig {
 interface AppState {
     tracks: Track[];
     playlists: Playlist[];
+    recentItems: RecentEntry[];
     currentTrackId: string | null;
     isPlaying: boolean;
     activeView: "main" | "media-library" | "playlists" | "playlist-detail";
@@ -64,6 +78,7 @@ interface AppState {
 const state: AppState = {
     tracks: [],
     playlists: [],
+    recentItems: [],
     currentTrackId: null,
     isPlaying: false,
     activeView: "main",
@@ -74,6 +89,7 @@ const state: AppState = {
 const audio = new Audio();
 let pendingRestore: PlayerConfig | null = null;
 let playerSaveQueue: Promise<void> = Promise.resolve();
+let recentSaveQueue: Promise<void> = Promise.resolve();
 let toastTimer: number | undefined;
 let toastHideTimer: number | undefined;
 
@@ -120,14 +136,18 @@ function savePlayerConfig() {
 }
 
 async function loadSavedData() {
-    const [tracks, playlists, covers, playerConfig] = await Promise.all([
+    const [tracks, playlists, covers, playerConfig, recentItems] = await Promise.all([
         invoke<StoredTrack[]>("get_library"),
         invoke<StoredPlaylist[]>("get_playlists"),
         invoke<StoredCover[]>("get_covers"),
         invoke<PlayerConfig>("get_player_config"),
+        invoke<RecentEntry[]>("get_recently_played"),
     ]);
     state.tracks = tracks.map(mapStoredTrack);
     state.playlists = playlists.map(mapStoredPlaylist);
+    state.recentItems = recentItems;
+    updateHomeFavoritesCount();
+    updateFavoriteButton();
 
     covers.forEach((cover) => {
         const coverSrc = mapStoredCover(cover).src;
@@ -155,6 +175,7 @@ async function loadSavedData() {
 
     renderMediaLibrary();
     renderPlaylists();
+    renderRecentlyPlayed();
 }
 
 async function changeCover(kind: CoverKind, entityId: string) {
@@ -172,12 +193,14 @@ async function changeCover(kind: CoverKind, entityId: string) {
         if (!track) return;
         track.cover = coverSrc;
         if (state.currentTrackId === entityId) updateTrackMetadata(track);
+        renderRecentlyPlayed();
     } else {
         const playlist = state.playlists.find((item) => item.id === entityId);
         if (!playlist) return;
         playlist.cover = coverSrc;
         renderPlaylists();
         renderPlaylistDetail();
+        renderRecentlyPlayed();
     }
 
     showToast("Обложка сохранена");
@@ -202,6 +225,10 @@ const elements = {
     createPlaylistBtn: document.getElementById("create-playlist-btn") as HTMLButtonElement,
     playlistsCreateBtn: document.getElementById("playlists-create-btn") as HTMLButtonElement,
     emptyCreatePlaylistBtn: document.getElementById("empty-create-playlist-btn") as HTMLButtonElement,
+    homeMediaLibraryCard: document.getElementById("home-media-library-card") as HTMLElement,
+    homeFavoritesCard: document.getElementById("home-favorites-card") as HTMLElement,
+    homeFavoritesCount: document.getElementById("home-favorites-count") as HTMLElement,
+    recentlyPlayedGrid: document.getElementById("recently-played-grid") as HTMLElement,
 
     // Списки и Empty-states
     mediaEmptyState: document.getElementById("media-empty-state") as HTMLElement,
@@ -227,6 +254,7 @@ const elements = {
     sidebarCover: document.getElementById("sidebar-cover") as HTMLImageElement,
     sidebarCoverWrapper: document.querySelector(".sidebar-cover-wrapper") as HTMLElement,
     changeTrackCoverBtn: document.getElementById("change-track-cover-btn") as HTMLButtonElement,
+    favoriteBtn: document.getElementById("add-btn") as HTMLButtonElement,
     editTrackBtn: document.getElementById("edit-track-btn") as HTMLButtonElement,
     trackEditForm: document.getElementById("track-edit-form") as HTMLFormElement,
     trackTitleInput: document.getElementById("track-title-input") as HTMLInputElement,
@@ -392,6 +420,59 @@ function renderMediaLibrary() {
     }
 }
 
+function escapeHtml(value: string) {
+    return value.replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    })[character] ?? character);
+}
+
+function renderRecentlyPlayed() {
+    const items = state.recentItems;
+
+    if (items.length === 0) {
+        elements.recentlyPlayedGrid.innerHTML = '<p class="recently-played-empty">Пока ничего не прослушано</p>';
+        return;
+    }
+
+    elements.recentlyPlayedGrid.innerHTML = items.map((item) => {
+        const coverPath = item.cover.source === "file" ? convertFileSrc(item.cover.path) : item.cover.path;
+        const cover = escapeHtml(coverPath);
+        const title = escapeHtml(item.title);
+        const cardCover = item.kind === "track"
+            ? `<button class="card-play-btn" type="button" aria-label="Воспроизвести ${title}">
+                   <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20" /></svg>
+               </button>`
+            : "";
+
+        return `
+            <div class="media-card" data-recent-kind="${item.kind}" data-id="${escapeHtml(item.entity_id)}">
+                <div class="card-cover-wrapper">
+                    <img src="${cover}" alt="Обложка: ${title}" class="card-cover" />
+                    ${cardCover}
+                </div>
+                <div class="card-title">${title}</div>
+                <div class="card-artist">${escapeHtml(item.subtitle)}</div>
+            </div>`;
+    }).join("");
+
+    elements.recentlyPlayedGrid.querySelectorAll<HTMLElement>(".media-card").forEach((card) => {
+        card.addEventListener("click", () => {
+            const id = card.dataset.id;
+            if (!id) return;
+            if (card.dataset.recentKind === "track") {
+                playTrack(id);
+            } else {
+                state.selectedPlaylistId = id;
+                switchView("playlist-detail");
+            }
+        });
+    });
+}
+
 function renderTrackList(container: HTMLElement, tracks: Track[], context: "library" | "playlist") {
     const header = `
     <div class="track-list-header">
@@ -411,11 +492,19 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
         .map((track, idx) => {
             const isCurrent = state.currentTrackId === track.id;
             const isPlaying = isCurrent && state.isPlaying;
-                        const menuActions = context === "playlist"
-                                ? `<button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="remove-from-playlist" data-id="${track.id}">Удалить из плейлиста</button>`
-                                : `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>
-                                     <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="delete-track" data-id="${track.id}">Удалить из медиатеки</button>`;
-                        const actionMenu = `
+            const isFavoritesPlaylist = context === "playlist" && state.selectedPlaylistId === FAVORITES_PLAYLIST_ID;
+            const isFavorite = state.playlists
+                .find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID)
+                ?.trackIds.includes(track.id) ?? false;
+            const menuActions = `
+                <button class="track-menu-option" type="button" role="menuitem" data-action="toggle-favorite" data-id="${track.id}">${isFavorite ? "Убрать из избранного" : "Добавить в избранное"}</button>
+                ${context === "playlist"
+                    ? isFavoritesPlaylist
+                        ? `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>`
+                        : `<button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="remove-from-playlist" data-id="${track.id}">Удалить из плейлиста</button>`
+                    : `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>
+                       <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="delete-track" data-id="${track.id}">Удалить из медиатеки</button>`}`;
+            const actionMenu = `
                 <div class="track-actions-menu">
                     <button class="track-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Действия с треком ${track.title}" title="Действия с треком">
                         <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -484,6 +573,8 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
             try {
                 if (action === "add-to-playlist") {
                     openAddToPlaylistModal(trackId);
+                } else if (action === "toggle-favorite") {
+                    await toggleFavorite(trackId);
                 } else if (action === "delete-track") {
                     await deleteTrackFromLibrary(trackId);
                 } else if (action === "remove-from-playlist") {
@@ -500,6 +591,7 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
 async function deleteTrackFromLibrary(trackId: string) {
     await invoke<StoredTrack[]>("delete_track", { trackId });
     state.tracks = state.tracks.filter((track) => track.id !== trackId);
+    state.recentItems = state.recentItems.filter((item) => item.kind !== "track" || item.entity_id !== trackId);
     state.playlists.forEach((playlist) => {
         playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
     });
@@ -516,6 +608,7 @@ async function deleteTrackFromLibrary(trackId: string) {
         elements.sidebarArtist.textContent = "Выберите трек для воспроизведения";
         elements.editTrackBtn.disabled = true;
         elements.changeTrackCoverBtn.disabled = true;
+        updateFavoriteButton();
         elements.sidebarCoverWrapper.classList.remove("has-cover");
         elements.playerCover.src = "./src/assets/media_library.jpg";
         elements.sidebarCover.src = "./src/assets/media_library.jpg";
@@ -528,6 +621,7 @@ async function deleteTrackFromLibrary(trackId: string) {
     renderMediaLibrary();
     renderPlaylists();
     renderPlaylistDetail();
+    renderRecentlyPlayed();
     showToast("Трек удалён из медиатеки");
 }
 
@@ -539,7 +633,45 @@ async function removeTrackFromPlaylist(trackId: string) {
     playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
     renderPlaylistDetail();
     renderPlaylists();
+    renderRecentlyPlayed();
     showToast("Трек удалён из плейлиста");
+}
+
+async function toggleFavorite(trackId: string) {
+    const favorites = state.playlists.find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID);
+    if (!favorites) return;
+
+    const isFavorite = favorites.trackIds.includes(trackId);
+    if (isFavorite) {
+        await invoke("remove_track_from_playlist", { playlistId: favorites.id, trackId });
+        favorites.trackIds = favorites.trackIds.filter((id) => id !== trackId);
+    } else {
+        await invoke("add_track_to_playlist", { playlistId: favorites.id, trackId });
+        favorites.trackIds.push(trackId);
+    }
+
+    updateHomeFavoritesCount();
+    updateFavoriteButton();
+    renderPlaylists();
+    renderActiveTrackList();
+    renderRecentlyPlayed();
+    showToast(isFavorite ? "Трек удалён из избранного" : "Трек добавлен в избранное");
+}
+
+function updateFavoriteButton() {
+    const favorites = state.playlists.find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID);
+    const isFavorite = Boolean(state.currentTrackId && favorites?.trackIds.includes(state.currentTrackId));
+    const label = isFavorite ? "Убрать из избранного" : "Добавить в избранное";
+
+    elements.favoriteBtn.disabled = !state.currentTrackId;
+    elements.favoriteBtn.classList.toggle("added", isFavorite);
+    elements.favoriteBtn.title = label;
+    elements.favoriteBtn.setAttribute("aria-label", label);
+}
+
+function updateHomeFavoritesCount() {
+    const favorites = state.playlists.find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID);
+    if (favorites) elements.homeFavoritesCount.textContent = `${favorites.trackIds.length} треков`;
 }
 
 function playTrack(trackId: string) {
@@ -548,6 +680,11 @@ function playTrack(trackId: string) {
 
     closeTrackEditor();
     pendingRestore = null;
+
+    if (state.activeView === "playlist-detail" && state.selectedPlaylistId) {
+        recordRecentlyPlayed("playlist", state.selectedPlaylistId);
+    }
+    recordRecentlyPlayed("track", trackId);
 
     if (state.currentTrackId !== trackId) {
         state.currentTrackId = trackId;
@@ -564,6 +701,15 @@ function playTrack(trackId: string) {
     savePlayerConfig();
 }
 
+function recordRecentlyPlayed(kind: RecentItemKind, entityId: string) {
+    recentSaveQueue = recentSaveQueue
+        .then(async () => {
+            state.recentItems = await invoke<RecentEntry[]>("record_recently_played", { kind, entityId });
+            renderRecentlyPlayed();
+        })
+        .catch((error) => console.error("Не удалось сохранить историю прослушивания:", error));
+}
+
 function updateTrackMetadata(track: Track) {
     const cover = track.cover || "./src/assets/media_library.jpg";
     elements.sidebarCoverWrapper.classList.toggle("has-cover", Boolean(track.cover));
@@ -574,6 +720,7 @@ function updateTrackMetadata(track: Track) {
     elements.sidebarArtist.textContent = track.artist;
     elements.editTrackBtn.disabled = false;
     elements.changeTrackCoverBtn.disabled = false;
+    updateFavoriteButton();
     requestAnimationFrame(updateTrackTextMarquee);
 
     [elements.playerCover, elements.sidebarCover].forEach((image) => {
@@ -666,6 +813,7 @@ async function saveTrackMetadata() {
         }
 
         renderActiveTrackList();
+        renderRecentlyPlayed();
         closeTrackEditor();
         elements.trackEditStatus.hidden = true;
         showToast("Изменения сохранены");
@@ -782,6 +930,7 @@ async function submitPlaylistForm() {
             state.playlists = state.playlists.map((playlist) => playlist.id === updatedPlaylist.id ? updatedPlaylist : playlist);
             renderPlaylists();
             renderPlaylistDetail();
+            renderRecentlyPlayed();
         } else {
             await createPlaylist(name, category);
         }
@@ -826,7 +975,11 @@ function renderPlaylists() {
       <div class="media-card" data-playlist-id="${pl.id}">
         <div class="card-cover-wrapper">
                     <div class="card-cover playlist-cover" style="background:#282828; display:flex; align-items:center; justify-content:center;">
-                        ${pl.cover ? `<img src="${pl.cover}" alt="Обложка: ${pl.title}" />` : "🎵"}
+                        ${pl.cover
+                            ? `<img src="${pl.cover}" alt="Обложка: ${pl.title}" />`
+                            : pl.id === FAVORITES_PLAYLIST_ID
+                                ? `<img src="./src/assets/favorites.jpg" alt="Обложка: ${pl.title}" />`
+                                : "🎵"}
                     </div>
         </div>
         <div class="card-title">${pl.title}</div>
@@ -847,6 +1000,7 @@ function renderPlaylists() {
             });
         });
     }
+    updateHomeFavoritesCount();
 }
 
 function renderPlaylistDetail() {
@@ -855,6 +1009,10 @@ function renderPlaylistDetail() {
 
     elements.playlistDetailTitle.textContent = playlist.title;
     elements.playlistDetailCount.textContent = `${playlist.category} · ${playlist.trackIds.length} треков`;
+    const isFavorites = playlist.id === FAVORITES_PLAYLIST_ID;
+    elements.editPlaylistBtn.hidden = isFavorites;
+    elements.deletePlaylistBtn.hidden = isFavorites;
+    elements.changePlaylistCoverBtn.hidden = isFavorites;
 
     const playlistTracks = state.tracks.filter((t) => playlist.trackIds.includes(t.id));
     renderTrackList(elements.playlistTrackListContainer, playlistTracks, "playlist");
@@ -899,6 +1057,7 @@ function openAddToPlaylistModal(trackId: string) {
                     await invoke("add_track_to_playlist", { playlistId: plId, trackId: trackToAddToPlaylist });
                     pl.trackIds.push(trackToAddToPlaylist);
                     renderPlaylists();
+                    renderRecentlyPlayed();
                     showToast("Трек добавлен в плейлист");
                 }
                 closeModal(elements.addToPlaylistModal);
@@ -932,6 +1091,21 @@ function initEvents() {
     elements.mainBtn?.addEventListener("click", () => switchView("main"));
     elements.mediaLibraryBtn?.addEventListener("click", () => switchView("media-library"));
     elements.playlistsBtn?.addEventListener("click", () => switchView("playlists"));
+    const openCardFromKeyboard = (event: KeyboardEvent, open: () => void) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        open();
+    };
+    elements.homeMediaLibraryCard?.addEventListener("click", () => switchView("media-library"));
+    elements.homeMediaLibraryCard?.addEventListener("keydown", (event) => {
+        openCardFromKeyboard(event, () => switchView("media-library"));
+    });
+    const openFavorites = () => {
+        state.selectedPlaylistId = FAVORITES_PLAYLIST_ID;
+        switchView("playlist-detail");
+    };
+    elements.homeFavoritesCard?.addEventListener("click", openFavorites);
+    elements.homeFavoritesCard?.addEventListener("keydown", (event) => openCardFromKeyboard(event, openFavorites));
 
     // Добавление треков
     elements.addTrackBtn?.addEventListener("click", addTrackHandler);
@@ -965,7 +1139,7 @@ function initEvents() {
     elements.playlistBackBtn?.addEventListener("click", () => switchView("playlists"));
     elements.editPlaylistBtn?.addEventListener("click", openEditPlaylistModal);
     elements.changePlaylistCoverBtn?.addEventListener("click", async () => {
-        if (!state.selectedPlaylistId) return;
+        if (!state.selectedPlaylistId || state.selectedPlaylistId === FAVORITES_PLAYLIST_ID) return;
         try {
             await changeCover("playlist", state.selectedPlaylistId);
         } catch (error) {
@@ -976,6 +1150,8 @@ function initEvents() {
         if (state.selectedPlaylistId) {
             await invoke("delete_playlist", { playlistId: state.selectedPlaylistId });
             state.playlists = state.playlists.filter((p) => p.id !== state.selectedPlaylistId);
+            state.recentItems = state.recentItems.filter((item) => item.kind !== "playlist" || item.entity_id !== state.selectedPlaylistId);
+            renderRecentlyPlayed();
             switchView("playlists");
             showToast("Плейлист удалён");
         }
@@ -991,6 +1167,14 @@ function initEvents() {
         }
     });
     elements.editTrackBtn?.addEventListener("click", openTrackEditor);
+    elements.favoriteBtn?.addEventListener("click", async () => {
+        if (!state.currentTrackId) return;
+        try {
+            await toggleFavorite(state.currentTrackId);
+        } catch (error) {
+            showToast(`Не удалось обновить избранное: ${String(error)}`, true);
+        }
+    });
     elements.trackEditForm?.addEventListener("submit", (event) => {
         event.preventDefault();
         void saveTrackMetadata();

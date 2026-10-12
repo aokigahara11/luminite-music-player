@@ -117,20 +117,7 @@
             <div class="section-header">
               <h3 class="section-subtitle">Недавно прослушано</h3>
             </div>
-            <div class="cards-grid">
-              <div class="media-card">
-                <div class="card-cover-wrapper">
-                  <img src="./src/assets/dekma.jpeg" alt="Cover" class="card-cover" />
-                  <button class="card-play-btn">
-                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
-                      <polygon points="6,4 20,12 6,20" />
-                    </svg>
-                  </button>
-                </div>
-                <div class="card-title">ПОНЯТЬ</div>
-                <div class="card-artist">ВУЛЬФ, dekma</div>
-              </div>
-            </div>
+            <div class="cards-grid" id="recently-played-grid"></div>
 
             <!-- Плейлисты -->
             <div class="section-header" style="margin-top: 32px;">
@@ -139,7 +126,7 @@
             
             <div class="cards-grid">
               <!-- Карточка Медиатеки -->
-              <div class="media-card">
+              <div class="media-card" id="home-media-library-card" role="button" tabindex="0" aria-label="Открыть медиатеку">
                 <div class="card-cover-wrapper">
                   <img src="./src/assets/media_library.jpg" alt="Медиатека" class="card-cover" />
                   <button class="card-play-btn">
@@ -153,7 +140,7 @@
               </div>
 
               <!-- Карточка Избранное -->
-              <div class="media-card">
+              <div class="media-card" id="home-favorites-card" role="button" tabindex="0" aria-label="Открыть Избранное">
                 <div class="card-cover-wrapper">
                   <img src="./src/assets/favorites.jpg" alt="Медиатека" class="card-cover" />
                   <button class="card-play-btn">
@@ -163,7 +150,7 @@
                   </button>
                 </div>
                 <div class="card-title">Избранное</div>
-                <div class="card-artist">Любимые треки</div>
+                <div class="card-artist" id="home-favorites-count">Любимые треки</div>
               </div>
             </div>
           </div>
@@ -360,7 +347,7 @@
           </div>
           
           <div class="track-actions">
-            <button class="btn-ctrl" id="add-btn" title="Добавить в медиатеку">
+            <button class="btn-ctrl" id="add-btn" title="Добавить в избранное" aria-label="Добавить в избранное" disabled>
               <svg class="icon-svg icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="16"></line>
