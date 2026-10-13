@@ -1,98 +1,19 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { api } from "./api";
+import { elements } from "./elements";
+import { mapStoredCover, mapStoredPlaylist, mapStoredTrack } from "./mappers";
+import { state } from "./state";
+import type {
+    AppState,
+    CoverKind,
+    PlayerConfig,
+    PlaylistCategory,
+    RecentItemKind,
+    Track,
+} from "./types";
 
-type PlaylistCategory = "EP" | "Альбом" | "Плейлист";
-type CoverKind = "track" | "playlist";
-type RecentItemKind = "track" | "playlist";
 const FAVORITES_PLAYLIST_ID = "favorites";
-
-interface Track {
-    id: string;
-    title: string;
-    artist: string;
-    path: string;
-    src: string;
-    duration: number;
-    cover?: string;
-}
-
-interface Playlist {
-    id: string;
-    title: string;
-    category: PlaylistCategory;
-    trackIds: string[];
-    cover?: string;
-}
-
-interface RecentEntry {
-    kind: RecentItemKind;
-    entity_id: string;
-    title: string;
-    subtitle: string;
-    cover: {
-        source: "asset" | "file";
-        path: string;
-    };
-}
-
-interface StoredCover {
-    id: string;
-    kind: CoverKind;
-    entity_id: string;
-    path_file: string;
-}
-
-interface StoredTrack {
-    id: string;
-    path: string;
-    title: string;
-    artist: string | null;
-    duration: number;
-}
-
-interface StoredPlaylist {
-    id: string;
-    name: string;
-    category: PlaylistCategory;
-    id_tracks: string[];
-}
-
-interface PlayerConfig {
-    current_track_id: string | null;
-    position_secs: number;
-    volume: number;
-    is_playing: boolean;
-}
-
-interface AppState {
-    tracks: Track[];
-    playlists: Playlist[];
-    recentItems: RecentEntry[];
-    currentTrackId: string | null;
-    isPlaying: boolean;
-    activeView: "main" | "media-library" | "playlists" | "playlist-detail";
-    selectedPlaylistId: string | null;
-    searchQuery: string;
-    repeatMode: "off" | "all" | "one";
-    shuffleEnabled: boolean;
-    playbackQueueTrackIds: string[];
-    playbackQueuePlaylistId: string | null;
-}
-
-const state: AppState = {
-    tracks: [],
-    playlists: [],
-    recentItems: [],
-    currentTrackId: null,
-    isPlaying: false,
-    activeView: "main",
-    selectedPlaylistId: null,
-    searchQuery: "",
-    repeatMode: "off",
-    shuffleEnabled: false,
-    playbackQueueTrackIds: [],
-    playbackQueuePlaylistId: null,
-};
 
 const audio = new Audio();
 let pendingRestore: PlayerConfig | null = null;
@@ -100,30 +21,6 @@ let playerSaveQueue: Promise<void> = Promise.resolve();
 let recentSaveQueue: Promise<void> = Promise.resolve();
 let toastTimer: number | undefined;
 let toastHideTimer: number | undefined;
-
-function mapStoredTrack(track: StoredTrack): Track {
-    return {
-        ...track,
-        artist: track.artist || "Неизвестный исполнитель",
-        src: convertFileSrc(track.path),
-    };
-}
-
-function mapStoredPlaylist(playlist: StoredPlaylist): Playlist {
-    return {
-        id: playlist.id,
-        title: playlist.name,
-        category: playlist.category || "Плейлист",
-        trackIds: playlist.id_tracks,
-    };
-}
-
-function mapStoredCover(cover: StoredCover) {
-    return {
-        ...cover,
-        src: convertFileSrc(cover.path_file),
-    };
-}
 
 function savePlayerConfig() {
     const config: PlayerConfig = {
@@ -134,22 +31,17 @@ function savePlayerConfig() {
     };
 
     playerSaveQueue = playerSaveQueue
-        .then(() => invoke<void>("save_player_config", {
-            currentTrackId: config.current_track_id,
-            positionSecs: config.position_secs,
-            volume: config.volume,
-            isPlaying: config.is_playing,
-        }))
+        .then(() => api.savePlayerConfig(config))
         .catch((error) => console.error("Не удалось сохранить состояние плеера:", error));
 }
 
 async function loadSavedData() {
     const [tracks, playlists, covers, playerConfig, recentItems] = await Promise.all([
-        invoke<StoredTrack[]>("get_library"),
-        invoke<StoredPlaylist[]>("get_playlists"),
-        invoke<StoredCover[]>("get_covers"),
-        invoke<PlayerConfig>("get_player_config"),
-        invoke<RecentEntry[]>("get_recently_played"),
+        api.getLibrary(),
+        api.getPlaylists(),
+        api.getCovers(),
+        api.getPlayerConfig(),
+        api.getRecentlyPlayed(),
     ]);
     state.tracks = tracks.map(mapStoredTrack);
     state.playlists = playlists.map(mapStoredPlaylist);
@@ -194,7 +86,7 @@ async function changeCover(kind: CoverKind, entityId: string) {
     });
     if (typeof filePath !== "string") return;
 
-    const storedCover = await invoke<StoredCover>("set_cover", { kind, entityId, filePath });
+    const storedCover = await api.setCover(kind, entityId, filePath);
     const coverSrc = mapStoredCover(storedCover).src;
 
     if (kind === "track") {
@@ -214,97 +106,6 @@ async function changeCover(kind: CoverKind, entityId: string) {
 
     showToast("Обложка сохранена");
 }
-
-const elements = {
-    // Навигация
-    mainBtn: document.getElementById("main-btn") as HTMLButtonElement,
-    mediaLibraryBtn: document.getElementById("media-libary-btn") as HTMLButtonElement,
-    playlistsBtn: document.getElementById("playlists-btn") as HTMLButtonElement,
-
-    // Вьюшки
-    viewMain: document.getElementById("view-main") as HTMLElement,
-    viewMediaLibrary: document.getElementById("view-media-library") as HTMLElement,
-    viewPlaylists: document.getElementById("view-playlists") as HTMLElement,
-    viewPlaylistDetail: document.getElementById("view-playlist-detail") as HTMLElement,
-
-    // Кнопки добавления / создания
-    addTrackBtn: document.getElementById("add-track-btn") as HTMLButtonElement,
-    libraryAddTrackBtn: document.getElementById("library-add-track-btn") as HTMLButtonElement,
-    emptyScanBtn: document.getElementById("empty-scan-btn") as HTMLButtonElement,
-    createPlaylistBtn: document.getElementById("create-playlist-btn") as HTMLButtonElement,
-    playlistsCreateBtn: document.getElementById("playlists-create-btn") as HTMLButtonElement,
-    emptyCreatePlaylistBtn: document.getElementById("empty-create-playlist-btn") as HTMLButtonElement,
-    homeMediaLibraryCard: document.getElementById("home-media-library-card") as HTMLElement,
-    homeFavoritesCard: document.getElementById("home-favorites-card") as HTMLElement,
-    homeFavoritesCount: document.getElementById("home-favorites-count") as HTMLElement,
-    recentlyPlayedGrid: document.getElementById("recently-played-grid") as HTMLElement,
-
-    // Списки и Empty-states
-    mediaEmptyState: document.getElementById("media-empty-state") as HTMLElement,
-    trackListContainer: document.getElementById("track-list-container") as HTMLElement,
-    playlistsEmptyState: document.getElementById("playlists-empty-state") as HTMLElement,
-    playlistsGrid: document.querySelector("#view-playlists .cards-grid") as HTMLElement,
-    playlistTrackListContainer: document.getElementById("playlist-track-list-container") as HTMLElement,
-
-    // Управление плейлистом
-    playlistDetailTitle: document.getElementById("playlist-detail-title") as HTMLElement,
-    playlistDetailCount: document.getElementById("playlist-detail-count") as HTMLElement,
-    editPlaylistBtn: document.getElementById("edit-playlist-btn") as HTMLButtonElement,
-    deletePlaylistBtn: document.getElementById("delete-playlist-btn") as HTMLButtonElement,
-    changePlaylistCoverBtn: document.getElementById("change-playlist-cover-btn") as HTMLButtonElement,
-    playlistBackBtn: document.getElementById("playlist-back-btn") as HTMLButtonElement,
-
-    // Плеер-бар
-    playerTitle: document.getElementById("player-title") as HTMLElement,
-    playerArtist: document.getElementById("player-artist") as HTMLElement,
-    playerCover: document.getElementById("player-cover") as HTMLImageElement,
-    sidebarTitle: document.getElementById("sidebar-title") as HTMLElement,
-    sidebarArtist: document.getElementById("sidebar-artist") as HTMLElement,
-    sidebarCover: document.getElementById("sidebar-cover") as HTMLImageElement,
-    sidebarCoverWrapper: document.querySelector(".sidebar-cover-wrapper") as HTMLElement,
-    changeTrackCoverBtn: document.getElementById("change-track-cover-btn") as HTMLButtonElement,
-    favoriteBtn: document.getElementById("add-btn") as HTMLButtonElement,
-    editTrackBtn: document.getElementById("edit-track-btn") as HTMLButtonElement,
-    trackEditForm: document.getElementById("track-edit-form") as HTMLFormElement,
-    trackTitleInput: document.getElementById("track-title-input") as HTMLInputElement,
-    trackArtistInput: document.getElementById("track-artist-input") as HTMLInputElement,
-    saveTrackEditBtn: document.getElementById("save-track-edit-btn") as HTMLButtonElement,
-    cancelTrackEditBtn: document.getElementById("cancel-track-edit-btn") as HTMLButtonElement,
-    trackEditStatus: document.getElementById("track-edit-status") as HTMLElement,
-    appToast: document.getElementById("app-toast") as HTMLElement,
-    appToastMessage: document.getElementById("app-toast-message") as HTMLElement,
-    appToastIcon: document.querySelector("#app-toast .app-toast-icon") as SVGElement,
-    playBtn: document.getElementById("play-btn") as HTMLButtonElement,
-    prevBtn: document.getElementById("prev-btn") as HTMLButtonElement,
-    nextBtn: document.getElementById("next-btn") as HTMLButtonElement,
-    repeatBtn: document.getElementById("repeat-btn") as HTMLButtonElement,
-    shuffleBtn: document.getElementById("shuffle-btn") as HTMLButtonElement,
-    progressSlider: document.getElementById("progress-slider") as HTMLInputElement,
-    progressTooltip: document.getElementById("progress-tooltip") as HTMLElement,
-    volumeSlider: document.getElementById("volume-slider") as HTMLInputElement,
-    currentTime: document.getElementById("current-time") as HTMLElement,
-    totalTime: document.getElementById("total-time") as HTMLElement,
-
-    // Модальные окна
-    createPlaylistModal: document.getElementById("create-playlist-modal") as HTMLElement,
-    closeModalBtn: document.getElementById("close-modal-btn") as HTMLButtonElement,
-    submitPlaylistBtn: document.getElementById("submit-playlist-btn") as HTMLButtonElement,
-    playlistNameInput: document.getElementById("playlist-name-input") as HTMLInputElement,
-    playlistModalTitle: document.getElementById("playlist-modal-title") as HTMLElement,
-    playlistCategorySelect: document.getElementById("playlist-category-select") as HTMLSelectElement,
-    playlistFormStatus: document.getElementById("playlist-form-status") as HTMLElement,
-
-    addToPlaylistModal: document.getElementById("add-to-playlist-modal") as HTMLElement,
-    closeAddPlaylistModalBtn: document.getElementById("close-add-playlist-modal-btn") as HTMLButtonElement,
-    modalPlaylistsList: document.getElementById("modal-playlists-list") as HTMLElement,
-    modalPlaylistsEmpty: document.getElementById("modal-playlists-empty") as HTMLElement,
-    modalCreatePlaylistBtn: document.getElementById("modal-create-playlist-btn") as HTMLButtonElement,
-
-    // Поиск
-    searchInput: document.querySelector(".search-input") as HTMLInputElement,
-    searchDropdown: document.getElementById("search-dropdown") as HTMLElement,
-    searchResultsList: document.getElementById("search-results-list") as HTMLElement,
-};
 
 function showToast(message: string, isError = false) {
     window.clearTimeout(toastTimer);
@@ -406,7 +207,7 @@ async function addTrackHandler() {
         const paths = Array.isArray(selected) ? selected : [selected];
 
         for (const filePath of paths) {
-            const track = await invoke<StoredTrack>("import_track", { filePath });
+            const track = await api.importTrack(filePath);
             state.tracks.push(mapStoredTrack(track));
         }
 
@@ -603,7 +404,7 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
 }
 
 async function deleteTrackFromLibrary(trackId: string) {
-    await invoke<StoredTrack[]>("delete_track", { trackId });
+    await api.deleteTrack(trackId);
     state.tracks = state.tracks.filter((track) => track.id !== trackId);
     state.recentItems = state.recentItems.filter((item) => item.kind !== "track" || item.entity_id !== trackId);
     state.playlists.forEach((playlist) => {
@@ -643,7 +444,7 @@ async function removeTrackFromPlaylist(trackId: string) {
     const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
     if (!playlist) return;
 
-    await invoke("remove_track_from_playlist", { playlistId: playlist.id, trackId });
+    await api.removeTrackFromPlaylist(playlist.id, trackId);
     playlist.trackIds = playlist.trackIds.filter((id) => id !== trackId);
     renderPlaylistDetail();
     renderPlaylists();
@@ -657,10 +458,10 @@ async function toggleFavorite(trackId: string) {
 
     const isFavorite = favorites.trackIds.includes(trackId);
     if (isFavorite) {
-        await invoke("remove_track_from_playlist", { playlistId: favorites.id, trackId });
+        await api.removeTrackFromPlaylist(favorites.id, trackId);
         favorites.trackIds = favorites.trackIds.filter((id) => id !== trackId);
     } else {
-        await invoke("add_track_to_playlist", { playlistId: favorites.id, trackId });
+        await api.addTrackToPlaylist(favorites.id, trackId);
         favorites.trackIds.push(trackId);
     }
 
@@ -726,7 +527,7 @@ function playTrack(
 function recordRecentlyPlayed(kind: RecentItemKind, entityId: string) {
     recentSaveQueue = recentSaveQueue
         .then(async () => {
-            state.recentItems = await invoke<RecentEntry[]>("record_recently_played", { kind, entityId });
+            state.recentItems = await api.recordRecentlyPlayed(kind, entityId);
             renderRecentlyPlayed();
         })
         .catch((error) => console.error("Не удалось сохранить историю прослушивания:", error));
@@ -819,11 +620,7 @@ async function saveTrackMetadata() {
     }
 
     try {
-        const storedTrack = await invoke<StoredTrack>("edit_metadata_track", {
-            id: track.id,
-            title,
-            artist,
-        });
+        const storedTrack = await api.editTrack(track.id, title, artist);
         const updatedTrack = { ...mapStoredTrack(storedTrack), cover: track.cover };
         state.tracks = state.tracks.map((item) => item.id === updatedTrack.id ? updatedTrack : item);
 
@@ -917,7 +714,7 @@ function toggleShuffle() {
 async function playNextTrack(naturalEnd = false) {
     const queueTrackIds = getPlaybackQueueTrackIds();
     if (!queueTrackIds.length) return;
-    const nextTrackId = await invoke<string | null>("get_next_track_id", {
+    const nextTrackId = await api.getNextTrackId({
         trackIds: queueTrackIds,
         currentTrackId: state.currentTrackId,
         repeatMode: state.repeatMode,
@@ -946,11 +743,7 @@ function getPlaybackQueueTrackIds() {
 async function playPrevTrack() {
     const queueTrackIds = getPlaybackQueueTrackIds();
     if (!queueTrackIds.length) return;
-    const previousTrackId = await invoke<string | null>("get_previous_track_id", {
-        trackIds: queueTrackIds,
-        currentTrackId: state.currentTrackId,
-        shuffleEnabled: state.shuffleEnabled,
-    });
+    const previousTrackId = await api.getPreviousTrackId(queueTrackIds, state.currentTrackId, state.shuffleEnabled);
     if (previousTrackId) playTrack(previousTrackId, queueTrackIds, state.playbackQueuePlaylistId);
 }
 
@@ -998,11 +791,7 @@ async function submitPlaylistForm() {
 
     try {
         if (playlistToEditId) {
-            const storedPlaylist = await invoke<StoredPlaylist>("edit_metadata_playlist", {
-                id: playlistToEditId,
-                name,
-                category,
-            });
+            const storedPlaylist = await api.editPlaylist(playlistToEditId, name, category);
             const updatedPlaylist = mapStoredPlaylist(storedPlaylist);
             state.playlists = state.playlists.map((playlist) => playlist.id === updatedPlaylist.id ? updatedPlaylist : playlist);
             renderPlaylists();
@@ -1025,13 +814,10 @@ async function submitPlaylistForm() {
 
 async function createPlaylist(title: string, category: PlaylistCategory) {
     if (!title.trim()) return;
-    const storedPlaylist = await invoke<StoredPlaylist>("create_playlist", { name: title.trim(), category });
+    const storedPlaylist = await api.createPlaylist(title.trim(), category);
     const newPlaylist = mapStoredPlaylist(storedPlaylist);
     if (trackToAddToPlaylist) {
-        await invoke("add_track_to_playlist", {
-            playlistId: newPlaylist.id,
-            trackId: trackToAddToPlaylist,
-        });
+        await api.addTrackToPlaylist(newPlaylist.id, trackToAddToPlaylist);
         newPlaylist.trackIds.push(trackToAddToPlaylist);
         trackToAddToPlaylist = null;
     }
@@ -1134,7 +920,7 @@ function openAddToPlaylistModal(trackId: string) {
             if (plId && trackToAddToPlaylist) {
                 const pl = state.playlists.find((p) => p.id === plId);
                 if (pl && !pl.trackIds.includes(trackToAddToPlaylist)) {
-                    await invoke("add_track_to_playlist", { playlistId: plId, trackId: trackToAddToPlaylist });
+                    await api.addTrackToPlaylist(plId, trackToAddToPlaylist);
                     pl.trackIds.push(trackToAddToPlaylist);
                     renderPlaylists();
                     renderRecentlyPlayed();
@@ -1229,7 +1015,7 @@ function initEvents() {
     elements.deletePlaylistBtn?.addEventListener("click", async () => {
         if (state.selectedPlaylistId) {
             const playlistId = state.selectedPlaylistId;
-            await invoke("delete_playlist", { playlistId });
+            await api.deletePlaylist(playlistId);
             if (state.playbackQueuePlaylistId === playlistId) {
                 state.playbackQueuePlaylistId = null;
                 state.playbackQueueTrackIds = state.tracks.map((track) => track.id);
