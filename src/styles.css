@@ -290,6 +290,22 @@ input[type="range"]::-webkit-slider-thumb {
   transform: scale(1.05);
 }
 
+.player-mode-btn {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.player-mode-btn.active {
+  color: #1db954;
+}
+
+.repeat-one-indicator {
+  display: none;
+}
+
+.player-mode-btn.repeat-one .repeat-one-indicator {
+  display: block;
+}
+
 .play-btn {
   background: #ffffff;
   color: #000000;

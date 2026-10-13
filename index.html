@@ -362,6 +362,14 @@
 
         <div class="player-center">
           <div class="controls">
+            <button class="btn-ctrl player-mode-btn" id="shuffle-btn" type="button" title="Случайный порядок выключен" aria-label="Включить случайный порядок" aria-pressed="false">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h2.5a6 6 0 0 1 4.2 1.7l7 8.6a6 6 0 0 0 4.2 1.7H21"></path>
+                <path d="M18 15l3 3-3 3"></path>
+                <path d="M3 18h2.5a6 6 0 0 0 4.2-1.7l7-8.6a6 6 0 0 1 4.2-1.7H21"></path>
+                <path d="M18 3l3 3-3 3"></path>
+              </svg>
+            </button>
             <button class="btn-ctrl" id="prev-btn">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="19 20 9 12 19 4 19 20" fill="currentColor"></polygon>
@@ -377,6 +385,15 @@
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="5 4 15 12 5 20 5 4" fill="currentColor"></polygon>
                 <line x1="19" y1="5" x2="19" y2="19"></line>
+              </svg>
+            </button>
+            <button class="btn-ctrl player-mode-btn" id="repeat-btn" type="button" title="Повтор выключен" aria-label="Включить повтор всех треков" aria-pressed="false">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m17 2 4 4-4 4"></path>
+                <path d="M3 11V9a3 3 0 0 1 3-3h15"></path>
+                <path d="m7 22-4-4 4-4"></path>
+                <path d="M21 13v2a3 3 0 0 1-3 3H3"></path>
+                <text class="repeat-one-indicator" x="12" y="15" text-anchor="middle" font-size="8" font-weight="700" fill="currentColor" stroke="none">1</text>
               </svg>
             </button>
           </div>

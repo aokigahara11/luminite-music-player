@@ -73,6 +73,10 @@ interface AppState {
     activeView: "main" | "media-library" | "playlists" | "playlist-detail";
     selectedPlaylistId: string | null;
     searchQuery: string;
+    repeatMode: "off" | "all" | "one";
+    shuffleEnabled: boolean;
+    playbackQueueTrackIds: string[];
+    playbackQueuePlaylistId: string | null;
 }
 
 const state: AppState = {
@@ -84,6 +88,10 @@ const state: AppState = {
     activeView: "main",
     selectedPlaylistId: null,
     searchQuery: "",
+    repeatMode: "off",
+    shuffleEnabled: false,
+    playbackQueueTrackIds: [],
+    playbackQueuePlaylistId: null,
 };
 
 const audio = new Audio();
@@ -145,6 +153,7 @@ async function loadSavedData() {
     ]);
     state.tracks = tracks.map(mapStoredTrack);
     state.playlists = playlists.map(mapStoredPlaylist);
+    state.playbackQueueTrackIds = state.tracks.map((track) => track.id);
     state.recentItems = recentItems;
     updateHomeFavoritesCount();
     updateFavoriteButton();
@@ -268,6 +277,8 @@ const elements = {
     playBtn: document.getElementById("play-btn") as HTMLButtonElement,
     prevBtn: document.getElementById("prev-btn") as HTMLButtonElement,
     nextBtn: document.getElementById("next-btn") as HTMLButtonElement,
+    repeatBtn: document.getElementById("repeat-btn") as HTMLButtonElement,
+    shuffleBtn: document.getElementById("shuffle-btn") as HTMLButtonElement,
     progressSlider: document.getElementById("progress-slider") as HTMLInputElement,
     progressTooltip: document.getElementById("progress-tooltip") as HTMLElement,
     volumeSlider: document.getElementById("volume-slider") as HTMLInputElement,
@@ -535,7 +546,10 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
             const target = e.target as HTMLElement;
             if (target.closest("button")) return;
             const trackId = row.getAttribute("data-id");
-            if (trackId) playTrack(trackId);
+            if (trackId) {
+                const playlistId = context === "playlist" ? state.selectedPlaylistId : null;
+                playTrack(trackId, tracks.map((item) => item.id), playlistId);
+            }
         });
     });
 
@@ -674,9 +688,17 @@ function updateHomeFavoritesCount() {
     if (favorites) elements.homeFavoritesCount.textContent = `${favorites.trackIds.length} треков`;
 }
 
-function playTrack(trackId: string) {
+function playTrack(
+    trackId: string,
+    queueTrackIds = state.tracks.map((track) => track.id),
+    queuePlaylistId: string | null = null,
+) {
     const track = state.tracks.find((t) => t.id === trackId);
     if (!track) return;
+
+    state.playbackQueueTrackIds = [...new Set(queueTrackIds)].filter((id) => state.tracks.some((item) => item.id === id));
+    if (!state.playbackQueueTrackIds.includes(trackId)) state.playbackQueueTrackIds.push(trackId);
+    state.playbackQueuePlaylistId = queuePlaylistId;
 
     closeTrackEditor();
     pendingRestore = null;
@@ -863,18 +885,73 @@ function updatePlayButtonIcon() {
         : `<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20" /></svg>`;
 }
 
-function playNextTrack() {
-    if (!state.tracks.length) return;
-    const currIdx = state.tracks.findIndex((t) => t.id === state.currentTrackId);
-    const nextIdx = (currIdx + 1) % state.tracks.length;
-    playTrack(state.tracks[nextIdx].id);
+function updatePlaybackModeButtons() {
+    const repeatLabels = {
+        off: ["Повтор выключен", "Включить повтор всех треков"],
+        all: ["Повтор всех треков", "Включить повтор одного трека"],
+        one: ["Повтор одного трека", "Выключить повтор"],
+    } as const;
+    const [repeatTitle, repeatLabel] = repeatLabels[state.repeatMode];
+    elements.repeatBtn.classList.toggle("active", state.repeatMode !== "off");
+    elements.repeatBtn.classList.toggle("repeat-one", state.repeatMode === "one");
+    elements.repeatBtn.title = repeatTitle;
+    elements.repeatBtn.setAttribute("aria-label", repeatLabel);
+    elements.repeatBtn.setAttribute("aria-pressed", String(state.repeatMode !== "off"));
+
+    elements.shuffleBtn.classList.toggle("active", state.shuffleEnabled);
+    elements.shuffleBtn.title = `Случайный порядок ${state.shuffleEnabled ? "включён" : "выключен"}`;
+    elements.shuffleBtn.setAttribute("aria-label", state.shuffleEnabled ? "Выключить случайный порядок" : "Включить случайный порядок");
+    elements.shuffleBtn.setAttribute("aria-pressed", String(state.shuffleEnabled));
 }
 
-function playPrevTrack() {
-    if (!state.tracks.length) return;
-    const currIdx = state.tracks.findIndex((t) => t.id === state.currentTrackId);
-    const prevIdx = (currIdx - 1 + state.tracks.length) % state.tracks.length;
-    playTrack(state.tracks[prevIdx].id);
+function toggleRepeatMode() {
+    state.repeatMode = state.repeatMode === "off" ? "all" : state.repeatMode === "all" ? "one" : "off";
+    updatePlaybackModeButtons();
+}
+
+function toggleShuffle() {
+    state.shuffleEnabled = !state.shuffleEnabled;
+    updatePlaybackModeButtons();
+}
+
+async function playNextTrack(naturalEnd = false) {
+    const queueTrackIds = getPlaybackQueueTrackIds();
+    if (!queueTrackIds.length) return;
+    const nextTrackId = await invoke<string | null>("get_next_track_id", {
+        trackIds: queueTrackIds,
+        currentTrackId: state.currentTrackId,
+        repeatMode: state.repeatMode,
+        shuffleEnabled: state.shuffleEnabled,
+        naturalEnd,
+    });
+    if (nextTrackId) {
+        if (naturalEnd && nextTrackId === state.currentTrackId) audio.currentTime = 0;
+        playTrack(nextTrackId, queueTrackIds, state.playbackQueuePlaylistId);
+    } else if (naturalEnd) {
+        state.isPlaying = false;
+        updatePlayButtonIcon();
+        renderActiveTrackList();
+        savePlayerConfig();
+    }
+}
+
+function getPlaybackQueueTrackIds() {
+    const sourcePlaylist = state.playbackQueuePlaylistId
+        ? state.playlists.find((playlist) => playlist.id === state.playbackQueuePlaylistId)
+        : undefined;
+    const trackIds = sourcePlaylist?.trackIds ?? state.playbackQueueTrackIds;
+    return [...new Set(trackIds)].filter((id) => state.tracks.some((track) => track.id === id));
+}
+
+async function playPrevTrack() {
+    const queueTrackIds = getPlaybackQueueTrackIds();
+    if (!queueTrackIds.length) return;
+    const previousTrackId = await invoke<string | null>("get_previous_track_id", {
+        trackIds: queueTrackIds,
+        currentTrackId: state.currentTrackId,
+        shuffleEnabled: state.shuffleEnabled,
+    });
+    if (previousTrackId) playTrack(previousTrackId, queueTrackIds, state.playbackQueuePlaylistId);
 }
 
 let playlistToEditId: string | null = null;
@@ -1014,7 +1091,10 @@ function renderPlaylistDetail() {
     elements.deletePlaylistBtn.hidden = isFavorites;
     elements.changePlaylistCoverBtn.hidden = isFavorites;
 
-    const playlistTracks = state.tracks.filter((t) => playlist.trackIds.includes(t.id));
+    const playlistTracks = playlist.trackIds.flatMap((trackId) => {
+        const track = state.tracks.find((item) => item.id === trackId);
+        return track ? [track] : [];
+    });
     renderTrackList(elements.playlistTrackListContainer, playlistTracks, "playlist");
 }
 
@@ -1148,9 +1228,14 @@ function initEvents() {
     });
     elements.deletePlaylistBtn?.addEventListener("click", async () => {
         if (state.selectedPlaylistId) {
-            await invoke("delete_playlist", { playlistId: state.selectedPlaylistId });
-            state.playlists = state.playlists.filter((p) => p.id !== state.selectedPlaylistId);
-            state.recentItems = state.recentItems.filter((item) => item.kind !== "playlist" || item.entity_id !== state.selectedPlaylistId);
+            const playlistId = state.selectedPlaylistId;
+            await invoke("delete_playlist", { playlistId });
+            if (state.playbackQueuePlaylistId === playlistId) {
+                state.playbackQueuePlaylistId = null;
+                state.playbackQueueTrackIds = state.tracks.map((track) => track.id);
+            }
+            state.playlists = state.playlists.filter((p) => p.id !== playlistId);
+            state.recentItems = state.recentItems.filter((item) => item.kind !== "playlist" || item.entity_id !== playlistId);
             renderRecentlyPlayed();
             switchView("playlists");
             showToast("Плейлист удалён");
@@ -1181,8 +1266,11 @@ function initEvents() {
     });
     elements.cancelTrackEditBtn?.addEventListener("click", closeTrackEditor);
     elements.playBtn?.addEventListener("click", togglePlay);
-    elements.nextBtn?.addEventListener("click", playNextTrack);
+    elements.nextBtn?.addEventListener("click", () => void playNextTrack());
     elements.prevBtn?.addEventListener("click", playPrevTrack);
+    elements.repeatBtn?.addEventListener("click", toggleRepeatMode);
+    elements.shuffleBtn?.addEventListener("click", toggleShuffle);
+    updatePlaybackModeButtons();
 
     // События Audio
     audio.addEventListener("loadedmetadata", async () => {
@@ -1218,7 +1306,7 @@ function initEvents() {
         if (state.isPlaying) savePlayerConfig();
     }, 5000);
 
-    audio.addEventListener("ended", playNextTrack);
+    audio.addEventListener("ended", () => void playNextTrack(true));
 
     elements.progressSlider?.addEventListener("input", () => {
         const seekTime = Number(elements.progressSlider.value);
