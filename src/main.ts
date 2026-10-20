@@ -1,11 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { api } from "./api";
 import { elements } from "./elements";
 import { mapStoredCover, mapStoredPlaylist, mapStoredTrack } from "./mappers";
 import { state } from "./state";
 import type {
     AppState,
+    AudioStatus,
     CoverKind,
     PlayerConfig,
     PlaylistCategory,
@@ -15,8 +17,14 @@ import type {
 
 const FAVORITES_PLAYLIST_ID = "favorites";
 
-const audio = new Audio();
-let pendingRestore: PlayerConfig | null = null;
+let audioStatus: AudioStatus = {
+    positionSecs: 0,
+    durationSecs: 0,
+    volume: 0.7,
+    isPlaying: false,
+    loaded: false,
+    ended: false,
+};
 let playerSaveQueue: Promise<void> = Promise.resolve();
 let recentSaveQueue: Promise<void> = Promise.resolve();
 let toastTimer: number | undefined;
@@ -25,8 +33,8 @@ let toastHideTimer: number | undefined;
 function savePlayerConfig() {
     const config: PlayerConfig = {
         current_track_id: state.currentTrackId,
-        position_secs: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
-        volume: audio.volume,
+        position_secs: Number.isFinite(audioStatus.positionSecs) ? audioStatus.positionSecs : 0,
+        volume: audioStatus.volume,
         is_playing: state.isPlaying,
     };
 
@@ -61,16 +69,32 @@ async function loadSavedData() {
         }
     });
 
-    audio.volume = playerConfig.volume;
+    try {
+        audioStatus = await api.setAudioVolume(playerConfig.volume);
+    } catch (error) {
+        console.error("Не удалось восстановить громкость:", error);
+        showToast("Не удалось восстановить громкость", true);
+    }
     elements.volumeSlider.value = Math.round(playerConfig.volume * 100).toString();
 
     const savedTrack = state.tracks.find((track) => track.id === playerConfig.current_track_id);
     if (savedTrack) {
-        pendingRestore = playerConfig;
         state.currentTrackId = savedTrack.id;
-        state.isPlaying = playerConfig.is_playing;
-        audio.src = savedTrack.src;
         updateTrackMetadata(savedTrack);
+        try {
+            audioStatus = await api.playAudio(
+                savedTrack.path,
+                playerConfig.position_secs,
+                playerConfig.is_playing,
+                playerConfig.volume,
+            );
+            state.isPlaying = audioStatus.isPlaying;
+        } catch (error) {
+            state.isPlaying = false;
+            console.error("Не удалось восстановить воспроизведение:", error);
+            showToast("Не удалось восстановить воспроизведение", true);
+        }
+        updateProgressDisplay();
         updatePlayButtonIcon();
     }
 
@@ -134,8 +158,8 @@ function formatTime(seconds: number): string {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
-function updateProgressDisplay(time = audio.currentTime) {
-    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+function updateProgressDisplay(time = audioStatus.positionSecs) {
+    const duration = Number.isFinite(audioStatus.durationSecs) && audioStatus.durationSecs > 0 ? audioStatus.durationSecs : 0;
     const currentTime = Number.isFinite(time) && duration > 0 ? Math.min(Math.max(time, 0), duration) : 0;
     const sliderMax = Math.max(1, Math.floor(duration));
 
@@ -147,7 +171,7 @@ function updateProgressDisplay(time = audio.currentTime) {
 }
 
 function updateProgressTooltip(time: number) {
-    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+    const duration = Number.isFinite(audioStatus.durationSecs) && audioStatus.durationSecs > 0 ? audioStatus.durationSecs : 0;
     const previewTime = duration > 0 ? Math.min(Math.max(time, 0), duration) : 0;
     const percentage = duration > 0 ? (previewTime / duration) * 100 : 0;
 
@@ -404,7 +428,27 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
 }
 
 async function deleteTrackFromLibrary(trackId: string) {
-    await api.deleteTrack(trackId);
+    const currentTrack = state.currentTrackId === trackId
+        ? state.tracks.find((track) => track.id === trackId)
+        : undefined;
+    const playbackPosition = audioStatus.positionSecs;
+    const wasPlaying = state.isPlaying;
+
+    if (currentTrack) audioStatus = await api.stopAudio();
+    try {
+        await api.deleteTrack(trackId);
+    } catch (error) {
+        if (currentTrack) {
+            try {
+                audioStatus = await api.playAudio(currentTrack.path, playbackPosition, wasPlaying, audioStatus.volume);
+                state.isPlaying = audioStatus.isPlaying;
+            } catch (restoreError) {
+                console.error("Не удалось восстановить воспроизведение после ошибки удаления:", restoreError);
+            }
+        }
+        throw error;
+    }
+
     state.tracks = state.tracks.filter((track) => track.id !== trackId);
     state.recentItems = state.recentItems.filter((item) => item.kind !== "track" || item.entity_id !== trackId);
     state.playlists.forEach((playlist) => {
@@ -412,9 +456,6 @@ async function deleteTrackFromLibrary(trackId: string) {
     });
 
     if (state.currentTrackId === trackId) {
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
         state.currentTrackId = null;
         state.isPlaying = false;
         elements.playerTitle.textContent = "Трек не выбран";
@@ -489,7 +530,7 @@ function updateHomeFavoritesCount() {
     if (favorites) elements.homeFavoritesCount.textContent = `${favorites.trackIds.length} треков`;
 }
 
-function playTrack(
+async function playTrack(
     trackId: string,
     queueTrackIds = state.tracks.map((track) => track.id),
     queuePlaylistId: string | null = null,
@@ -502,23 +543,34 @@ function playTrack(
     state.playbackQueuePlaylistId = queuePlaylistId;
 
     closeTrackEditor();
-    pendingRestore = null;
-
     if (state.activeView === "playlist-detail" && state.selectedPlaylistId) {
         recordRecentlyPlayed("playlist", state.selectedPlaylistId);
     }
     recordRecentlyPlayed("track", trackId);
 
     if (state.currentTrackId !== trackId) {
+        try {
+            audioStatus = await api.playAudio(track.path, 0, true, audioStatus.volume);
+        } catch (error) {
+            state.isPlaying = audioStatus.isPlaying;
+            showToast(`Не удалось воспроизвести аудио: ${String(error)}`, true);
+            return;
+        }
         state.currentTrackId = trackId;
-        audio.src = track.src;
         updateTrackMetadata(track);
-        updateProgressDisplay();
-        updateProgressTooltip(0);
+    } else {
+        try {
+            audioStatus = audioStatus.loaded
+                ? await api.resumeAudio()
+                : await api.playAudio(track.path, audioStatus.positionSecs, true, audioStatus.volume);
+        } catch (error) {
+            showToast(`Не удалось продолжить воспроизведение: ${String(error)}`, true);
+        }
     }
 
-    audio.play();
-    state.isPlaying = true;
+    state.isPlaying = audioStatus.isPlaying;
+    updateProgressDisplay();
+    updateProgressTooltip(audioStatus.positionSecs);
     updatePlayButtonIcon();
     renderActiveTrackList();
     savePlayerConfig();
@@ -571,26 +623,8 @@ function closeTrackEditor() {
 }
 
 async function reloadTrackAudio(track: Track, position: number, shouldPlay: boolean) {
-    const metadataLoaded = new Promise<void>((resolve, reject) => {
-        audio.addEventListener("loadedmetadata", () => resolve(), { once: true });
-        audio.addEventListener("error", () => reject(new Error("Не удалось загрузить аудиофайл")), { once: true });
-    });
-
-    audio.src = track.src;
-    audio.load();
-    await metadataLoaded;
-    audio.currentTime = Number.isFinite(audio.duration) ? Math.min(position, audio.duration) : position;
-
-    if (shouldPlay) {
-        try {
-            await audio.play();
-            state.isPlaying = true;
-        } catch {
-            state.isPlaying = false;
-        }
-    } else {
-        state.isPlaying = false;
-    }
+    audioStatus = await api.playAudio(track.path, position, shouldPlay, audioStatus.volume);
+    state.isPlaying = audioStatus.isPlaying;
 
     updatePlayButtonIcon();
     updateProgressDisplay();
@@ -603,7 +637,7 @@ async function saveTrackMetadata() {
     const artist = elements.trackArtistInput.value.trim();
     if (!track || !title) return;
     const wasCurrentTrack = state.currentTrackId === track.id;
-    const playbackPosition = audio.currentTime;
+    const playbackPosition = audioStatus.positionSecs;
     const wasPlaying = wasCurrentTrack && state.isPlaying;
 
     elements.saveTrackEditBtn.disabled = true;
@@ -611,15 +645,12 @@ async function saveTrackMetadata() {
     elements.trackEditStatus.hidden = false;
     elements.trackEditStatus.textContent = "Сохранение...";
 
-    if (wasCurrentTrack) {
-        audio.pause();
-        state.isPlaying = false;
-        audio.removeAttribute("src");
-        audio.load();
-        updatePlayButtonIcon();
-    }
-
     try {
+        if (wasCurrentTrack) {
+            audioStatus = await api.stopAudio();
+            state.isPlaying = false;
+            updatePlayButtonIcon();
+        }
         const storedTrack = await api.editTrack(track.id, title, artist);
         const updatedTrack = { ...mapStoredTrack(storedTrack), cover: track.cover };
         state.tracks = state.tracks.map((item) => item.id === updatedTrack.id ? updatedTrack : item);
@@ -657,19 +688,25 @@ function renderActiveTrackList() {
     if (state.activeView === "playlist-detail") renderPlaylistDetail();
 }
 
-function togglePlay() {
+async function togglePlay() {
     if (!state.currentTrackId && state.tracks.length > 0) {
         playTrack(state.tracks[0].id);
         return;
     }
     if (!state.currentTrackId) return;
 
-    if (state.isPlaying) {
-        audio.pause();
-        state.isPlaying = false;
-    } else {
-        audio.play();
-        state.isPlaying = true;
+    try {
+        const track = state.tracks.find((item) => item.id === state.currentTrackId);
+        audioStatus = state.isPlaying
+            ? await api.pauseAudio()
+            : audioStatus.loaded
+                ? await api.resumeAudio()
+                : track
+                    ? await api.playAudio(track.path, audioStatus.positionSecs, true, audioStatus.volume)
+                    : audioStatus;
+        state.isPlaying = audioStatus.isPlaying;
+    } catch (error) {
+        showToast(`Не удалось изменить воспроизведение: ${String(error)}`, true);
     }
     updatePlayButtonIcon();
     renderActiveTrackList();
@@ -722,8 +759,22 @@ async function playNextTrack(naturalEnd = false) {
         naturalEnd,
     });
     if (nextTrackId) {
-        if (naturalEnd && nextTrackId === state.currentTrackId) audio.currentTime = 0;
-        playTrack(nextTrackId, queueTrackIds, state.playbackQueuePlaylistId);
+        if (naturalEnd && nextTrackId === state.currentTrackId) {
+            const track = state.tracks.find((item) => item.id === nextTrackId);
+            if (track) {
+                try {
+                    audioStatus = await api.playAudio(track.path, 0, true, audioStatus.volume);
+                    state.isPlaying = audioStatus.isPlaying;
+                    updatePlayButtonIcon();
+                    savePlayerConfig();
+                } catch (error) {
+                    state.isPlaying = false;
+                    showToast(`Не удалось повторить трек: ${String(error)}`, true);
+                }
+            }
+        } else {
+            await playTrack(nextTrackId, queueTrackIds, state.playbackQueuePlaylistId);
+        }
     } else if (naturalEnd) {
         state.isPlaying = false;
         updatePlayButtonIcon();
@@ -935,7 +986,27 @@ function openAddToPlaylistModal(trackId: string) {
     openModal(elements.addToPlaylistModal);
 }
 
-function initEvents() {
+async function initEvents() {
+    try {
+        await listen<AudioStatus>("audio-state", ({ payload }) => {
+            const wasPlaying = state.isPlaying;
+            audioStatus = payload;
+            state.isPlaying = payload.isPlaying;
+            const currentTrack = state.tracks.find((track) => track.id === state.currentTrackId);
+            if (currentTrack && payload.durationSecs > 0) currentTrack.duration = payload.durationSecs;
+            updateProgressDisplay();
+
+            if (wasPlaying !== state.isPlaying) {
+                updatePlayButtonIcon();
+                renderActiveTrackList();
+            }
+            if (payload.ended) void playNextTrack(true);
+        });
+    } catch (error) {
+        console.error("Не удалось подписаться на состояние аудио:", error);
+        showToast("Не удалось подключить управление аудио", true);
+    }
+
     window.addEventListener("resize", updateTrackTextMarquee);
     document.addEventListener("click", () => {
         document.querySelectorAll<HTMLElement>(".track-actions-popover:not([hidden])").forEach((menu) => {
@@ -1058,45 +1129,17 @@ function initEvents() {
     elements.shuffleBtn?.addEventListener("click", toggleShuffle);
     updatePlaybackModeButtons();
 
-    // События Audio
-    audio.addEventListener("loadedmetadata", async () => {
-        const currentTrack = state.tracks.find((t) => t.id === state.currentTrackId);
-        if (currentTrack) currentTrack.duration = audio.duration;
-
-        if (pendingRestore && pendingRestore.current_track_id === state.currentTrackId) {
-            const savedState = pendingRestore;
-            pendingRestore = null;
-            audio.currentTime = Math.min(savedState.position_secs, audio.duration);
-
-            if (savedState.is_playing) {
-                try {
-                    await audio.play();
-                    state.isPlaying = true;
-                } catch {
-                    state.isPlaying = false;
-                }
-                updatePlayButtonIcon();
-            }
-            savePlayerConfig();
-        }
-
-        updateProgressDisplay();
-        renderActiveTrackList();
-    });
-
-    audio.addEventListener("timeupdate", () => {
-        updateProgressDisplay();
-    });
-
     window.setInterval(() => {
         if (state.isPlaying) savePlayerConfig();
     }, 5000);
 
-    audio.addEventListener("ended", () => void playNextTrack(true));
-
     elements.progressSlider?.addEventListener("input", () => {
         const seekTime = Number(elements.progressSlider.value);
-        audio.currentTime = seekTime;
+        void api.seekAudio(seekTime).then((status) => {
+            audioStatus = status;
+        }).catch((error) => {
+            showToast(`Не удалось изменить позицию: ${String(error)}`, true);
+        });
         updateProgressDisplay(seekTime);
         updateProgressTooltip(seekTime);
         savePlayerConfig();
@@ -1105,13 +1148,18 @@ function initEvents() {
     elements.progressSlider?.addEventListener("pointermove", (event) => {
         const bounds = elements.progressSlider.getBoundingClientRect();
         const progress = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
-        const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+        const duration = Number.isFinite(audioStatus.durationSecs) ? audioStatus.durationSecs : 0;
         updateProgressTooltip(progress * duration);
     });
 
     elements.volumeSlider?.addEventListener("input", () => {
-        audio.volume = Number(elements.volumeSlider.value) / 100;
-        savePlayerConfig();
+        const volume = Number(elements.volumeSlider.value) / 100;
+        void api.setAudioVolume(volume).then((status) => {
+            audioStatus = status;
+            savePlayerConfig();
+        }).catch((error) => {
+            showToast(`Не удалось изменить громкость: ${String(error)}`, true);
+        });
     });
 
     // Поиск
@@ -1152,7 +1200,7 @@ function initEvents() {
 
 // Запуск приложения
 document.addEventListener("DOMContentLoaded", async () => {
-    initEvents();
+    await initEvents();
     try {
         await loadSavedData();
     } catch (error) {

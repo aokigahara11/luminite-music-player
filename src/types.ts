@@ -7,7 +7,6 @@ export interface Track {
     title: string;
     artist: string;
     path: string;
-    src: string;
     duration: number;
     cover?: string;
 }
@@ -58,6 +57,15 @@ export interface PlayerConfig {
     position_secs: number;
     volume: number;
     is_playing: boolean;
+}
+
+export interface AudioStatus {
+    positionSecs: number;
+    durationSecs: number;
+    volume: number;
+    isPlaying: boolean;
+    loaded: boolean;
+    ended: boolean;
 }
 
 export interface AppState {

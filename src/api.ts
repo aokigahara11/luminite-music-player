@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
     CoverKind,
+    AudioStatus,
     PlayerConfig,
     PlaylistCategory,
     RecentEntry,
@@ -11,6 +12,13 @@ import type {
 } from "./types";
 
 export const api = {
+    playAudio: (path: string, positionSecs: number, shouldPlay: boolean, volume: number) =>
+        invoke<AudioStatus>("play_audio", { path, positionSecs, shouldPlay, volume }),
+    pauseAudio: () => invoke<AudioStatus>("pause_audio"),
+    resumeAudio: () => invoke<AudioStatus>("resume_audio"),
+    stopAudio: () => invoke<AudioStatus>("stop_audio"),
+    seekAudio: (positionSecs: number) => invoke<AudioStatus>("seek_audio", { positionSecs }),
+    setAudioVolume: (volume: number) => invoke<AudioStatus>("set_audio_volume", { volume }),
     getLibrary: () => invoke<StoredTrack[]>("get_library"),
     getPlaylists: () => invoke<StoredPlaylist[]>("get_playlists"),
     getCovers: () => invoke<StoredCover[]>("get_covers"),

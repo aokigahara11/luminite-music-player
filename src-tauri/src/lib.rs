@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod commands;
 pub mod database;
 pub mod models;
@@ -15,6 +16,9 @@ pub fn run() {
             let database = Database::open(app_dir).map_err(std::io::Error::other)?;
             database::initialize_schema(&database).map_err(std::io::Error::other)?;
             app.manage(database);
+            let audio_engine =
+                audio::AudioEngine::new(app.handle().clone()).map_err(std::io::Error::other)?;
+            app.manage(audio_engine);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -35,6 +39,12 @@ pub fn run() {
             commands::recently_played::record_recently_played,
             commands::player_config::get_player_config,
             commands::player_config::save_player_config,
+            audio::play_audio,
+            audio::pause_audio,
+            audio::resume_audio,
+            audio::stop_audio,
+            audio::seek_audio,
+            audio::set_audio_volume,
             commands::playback::get_next_track_id,
             commands::playback::get_previous_track_id
         ])

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "music-player",
-  "version": "0.1.0",
-  "identifier": "com.music-player",
+  "productName": "luminite-music-player",
+  "version": "1.0.1",
+  "identifier": "com.luminite-music-player",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "music-player",
+        "title": "luminite-music-player",
         "width": 800,
         "height": 600
       }

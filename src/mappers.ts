@@ -5,7 +5,6 @@ export function mapStoredTrack(track: StoredTrack): Track {
     return {
         ...track,
         artist: track.artist || "Неизвестный исполнитель",
-        src: convertFileSrc(track.path),
     };
 }
 
