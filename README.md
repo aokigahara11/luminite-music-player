@@ -1,4 +1,4 @@
-# music-player
+# luminite-music-player
 
 Лаконичный и быстрый локальный аудиоплеер, созданный с использованием Tauri v2, Rust и TypeScript (Vite).
 
@@ -26,3 +26,16 @@
 │   ├── Cargo.toml        # Зависимости Rust
 │   └── tauri.conf.json   # Конфигурация Tauri
 └── package.json          # Зависимости Node.js / Скрипты
+```
+## Установка
+
+Самый простой и быстрый способ установить Luminite на Windows — скачать готовый инсталлятор из официальных релизов:
+
+* Перейдите на страницу [GitHub Releases](https://github.com/aokigahara11/luminite-music-player/releases).
+
+* В блоке последней версии найдите раздел Assets.
+
+* Скачайте файл установщика .msi (например, luminite_1.0.0_x64_en-US.msi).
+
+* Запустите скачанный файл и следуйте инструкциям на экране, чтобы завершить установку.
+
