@@ -1,6 +1,6 @@
 [package]
 name = "luminite-music-player"
-version = "1.0.1"
+version = "1.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -29,4 +29,3 @@ rand = "0.8"
 rusqlite = { version = "0.34", features = ["bundled"] }
 rodio = { version = "0.20.1", features = ["symphonia-all"] }
 hound = "3.5.1"
-
