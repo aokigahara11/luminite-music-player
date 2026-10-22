@@ -16,10 +16,12 @@ import type {
 } from "./types";
 
 const FAVORITES_PLAYLIST_ID = "favorites";
+type RemixSpeed = "normal" | "slowed" | "speed_up";
 
 let audioStatus: AudioStatus = {
     positionSecs: 0,
     durationSecs: 0,
+    trackPath: null,
     volume: 0.7,
     isPlaying: false,
     loaded: false,
@@ -339,7 +341,9 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
                         ? `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>`
                         : `<button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="remove-from-playlist" data-id="${track.id}">Удалить из плейлиста</button>`
                     : `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>
-                       <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="delete-track" data-id="${track.id}">Удалить из медиатеки</button>`}`;
+                       <button class="track-menu-option" type="button" role="menuitem" data-action="create-remix" data-id="${track.id}">Создать ремикс трека</button>
+                       <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="delete-track" data-id="${track.id}">Удалить из медиатеки</button>`}
+            `;
             const actionMenu = `
                 <div class="track-actions-menu">
                     <button class="track-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Действия с треком ${track.title}" title="Действия с треком">
@@ -414,6 +418,8 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
                     openAddToPlaylistModal(trackId);
                 } else if (action === "toggle-favorite") {
                     await toggleFavorite(trackId);
+                } else if (action === "create-remix") {
+                    openRemixSpeedModal(trackId);
                 } else if (action === "delete-track") {
                     await deleteTrackFromLibrary(trackId);
                 } else if (action === "remove-from-playlist") {
@@ -943,6 +949,67 @@ function closeModal(modal: HTMLElement) {
     modal.classList.add("hidden");
 }
 
+let remixTrackId: string | null = null;
+let remixSpeed: RemixSpeed = "normal";
+let remixInProgress = false;
+
+function closeRemixModals() {
+    closeModal(elements.remixSpeedModal);
+    closeModal(elements.remixSettingsModal);
+    remixTrackId = null;
+}
+
+function openRemixSpeedModal(trackId: string) {
+    remixTrackId = trackId;
+    remixSpeed = "normal";
+    elements.remixSettingsModal.querySelectorAll<HTMLButtonElement>("[data-effect]").forEach((button) => {
+        button.setAttribute("aria-pressed", "false");
+    });
+    openModal(elements.remixSpeedModal);
+    elements.remixSpeedModal.querySelector<HTMLButtonElement>("[data-speed='normal']")?.focus();
+}
+
+function openRemixSettings(speed: RemixSpeed) {
+    if (!remixTrackId) return;
+    remixSpeed = speed;
+    closeModal(elements.remixSpeedModal);
+    openModal(elements.remixSettingsModal);
+    elements.remixCreateBtn.focus();
+}
+
+async function createRemix(effects: string[]) {
+    if (remixInProgress) return;
+    const sourceTrack = state.tracks.find((track) => track.id === remixTrackId);
+    if (!sourceTrack) {
+        closeRemixModals();
+        showToast("Исходный трек не найден в медиатеке", true);
+        return;
+    }
+
+    remixInProgress = true;
+    elements.remixCreateBtn.disabled = true;
+    elements.remixSkipBtn.disabled = true;
+    elements.remixCreateBtn.querySelector("span")!.textContent = "Создание...";
+    try {
+        const trackArtist = sourceTrack.artist === "Неизвестный исполнитель" ? "" : sourceTrack.artist;
+        const storedRemix = await api.createAndRenderRemix(sourceTrack.path, sourceTrack.title, trackArtist, remixSpeed, effects);
+        const remix = mapStoredTrack(storedRemix);
+        state.tracks.push(remix);
+        if (!state.playbackQueuePlaylistId) state.playbackQueueTrackIds.push(remix.id);
+        renderMediaLibrary();
+        closeRemixModals();
+        showToast(`Ремикс «${remix.title}» добавлен в медиатеку`);
+    } catch (error) {
+        console.error("Не удалось создать ремикс:", error);
+        showToast(`Не удалось создать ремикс: ${String(error)}`, true);
+    } finally {
+        elements.remixCreateBtn.disabled = false;
+        elements.remixSkipBtn.disabled = false;
+        remixInProgress = false;
+        elements.remixCreateBtn.querySelector("span")!.textContent = "Создать ремикс";
+    }
+}
+
 let trackToAddToPlaylist: string | null = null;
 function openAddToPlaylistModal(trackId: string) {
     trackToAddToPlaylist = trackId;
@@ -992,8 +1059,8 @@ async function initEvents() {
             const wasPlaying = state.isPlaying;
             audioStatus = payload;
             state.isPlaying = payload.isPlaying;
-            const currentTrack = state.tracks.find((track) => track.id === state.currentTrackId);
-            if (currentTrack && payload.durationSecs > 0) currentTrack.duration = payload.durationSecs;
+            const audioTrack = state.tracks.find((track) => track.path === payload.trackPath);
+            if (audioTrack && payload.durationSecs > 0) audioTrack.duration = payload.durationSecs;
             updateProgressDisplay();
 
             if (wasPlaying !== state.isPlaying) {
@@ -1059,6 +1126,45 @@ async function initEvents() {
     elements.closeAddPlaylistModalBtn?.addEventListener("click", () => {
         closeModal(elements.addToPlaylistModal);
         trackToAddToPlaylist = null;
+    });
+
+    elements.closeRemixSpeedBtn.addEventListener("click", closeRemixModals);
+    elements.closeRemixSettingsBtn.addEventListener("click", closeRemixModals);
+    elements.remixBackBtn.addEventListener("click", () => {
+        closeModal(elements.remixSettingsModal);
+        openModal(elements.remixSpeedModal);
+    });
+    elements.remixSpeedModal.addEventListener("click", (event) => {
+        if (event.target === elements.remixSpeedModal) closeRemixModals();
+    });
+    elements.remixSettingsModal.addEventListener("click", (event) => {
+        if (event.target === elements.remixSettingsModal) closeRemixModals();
+    });
+    elements.remixSpeedModal.querySelectorAll<HTMLButtonElement>("[data-speed]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const speed = button.dataset.speed;
+            if (speed === "normal" || speed === "slowed" || speed === "speed_up") {
+                openRemixSettings(speed);
+            }
+        });
+    });
+    elements.remixSettingsModal.querySelectorAll<HTMLButtonElement>("[data-effect]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const isSelected = button.getAttribute("aria-pressed") === "true";
+            button.setAttribute("aria-pressed", String(!isSelected));
+        });
+    });
+    elements.remixCreateBtn.addEventListener("click", () => {
+        const effects = Array.from(elements.remixSettingsModal.querySelectorAll<HTMLButtonElement>("[data-effect][aria-pressed='true']"))
+            .map((button) => button.dataset.effect)
+            .filter((effect): effect is string => Boolean(effect));
+        void createRemix(effects);
+    });
+    elements.remixSkipBtn.addEventListener("click", () => void createRemix([]));
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && (!elements.remixSpeedModal.classList.contains("hidden") || !elements.remixSettingsModal.classList.contains("hidden"))) {
+            closeRemixModals();
+        }
     });
 
     elements.modalCreatePlaylistBtn?.addEventListener("click", () => {

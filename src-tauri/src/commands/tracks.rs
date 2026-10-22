@@ -1,4 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use lofty::{
     config::WriteOptions,
@@ -17,7 +20,38 @@ use crate::{
 
 #[tauri::command]
 pub fn import_track(database: State<'_, Database>, file_path: String) -> Result<Track, String> {
-    let source_path = PathBuf::from(file_path);
+    import_track_file(&database, Path::new(&file_path), false)
+}
+
+pub fn import_generated_track(
+    database: &Database,
+    file_path: &Path,
+    artist: &str,
+) -> Result<Track, String> {
+    let artist = artist.trim();
+    if !artist.is_empty() {
+        let mut tagged_file = Probe::open(file_path)
+            .map_err(|error| format!("Ошибка открытия ремикса для записи исполнителя: {error}"))?
+            .read()
+            .map_err(|error| format!("Ошибка чтения метаданных ремикса: {error}"))?;
+        if tagged_file.primary_tag().is_none() {
+            tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
+        }
+        if let Some(tag) = tagged_file.primary_tag_mut() {
+            tag.set_artist(artist.to_string());
+        }
+        tagged_file
+            .save_to_path(file_path, WriteOptions::default())
+            .map_err(|error| format!("Не удалось сохранить исполнителя в ремиксе: {error}"))?;
+    }
+    import_track_file(database, file_path, true)
+}
+
+fn import_track_file(
+    database: &Database,
+    source_path: &Path,
+    move_source: bool,
+) -> Result<Track, String> {
     if !source_path.is_file() {
         return Err("Исходный аудиофайл не найден".to_string());
     }
@@ -29,27 +63,34 @@ pub fn import_track(database: State<'_, Database>, file_path: String) -> Result<
     let destination_path = database
         .media_dir
         .join(format!("{}{}", Uuid::new_v4(), extension));
-    fs::copy(&source_path, &destination_path)
-        .map_err(|error| format!("Ошибка копирования: {error}"))?;
-
-    let mut track = match parse_track_metadata(&destination_path) {
-        Ok(track) => track,
-        Err(error) => {
-            let _ = fs::remove_file(&destination_path);
-            return Err(error);
-        }
+    let mut track = parse_track_metadata(source_path)?;
+    let file_operation = if move_source {
+        fs::rename(source_path, &destination_path)
+    } else {
+        fs::copy(source_path, &destination_path).map(|_| ())
     };
+    file_operation.map_err(|error| {
+        if move_source {
+            format!("Не удалось переместить созданный трек: {error}")
+        } else {
+            format!("Ошибка копирования: {error}")
+        }
+    })?;
+
+    track.path = destination_path.to_string_lossy().into_owned();
     track.id = Uuid::new_v4().to_string();
-    let connection = database
-        .connection
-        .lock()
-        .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
-    if let Err(error) = tracks::insert(&connection, &track) {
+    let result = (|| {
+        let connection = database
+            .connection
+            .lock()
+            .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
+        tracks::insert(&connection, &track)?;
+        Ok(track)
+    })();
+    if result.is_err() {
         let _ = fs::remove_file(&destination_path);
-        return Err(error);
     }
-    drop(connection);
-    Ok(track)
+    result
 }
 
 #[tauri::command]

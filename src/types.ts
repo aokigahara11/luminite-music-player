@@ -62,6 +62,7 @@ export interface PlayerConfig {
 export interface AudioStatus {
     positionSecs: number;
     durationSecs: number;
+    trackPath: string | null;
     volume: number;
     isPlaying: boolean;
     loaded: boolean;

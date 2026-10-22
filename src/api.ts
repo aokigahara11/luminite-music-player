@@ -33,6 +33,14 @@ export const api = {
     setCover: (kind: CoverKind, entityId: string, filePath: string) =>
         invoke<StoredCover>("set_cover", { kind, entityId, filePath }),
     importTrack: (filePath: string) => invoke<StoredTrack>("import_track", { filePath }),
+    createAndRenderRemix: (
+        filePath: string,
+        trackTitle: string,
+        trackArtist: string,
+        speedType: "normal" | "slowed" | "speed_up",
+        effects: string[],
+    ) =>
+        invoke<StoredTrack>("create_and_render_remix", { filePath, trackTitle, trackArtist, speedType, effects }),
     deleteTrack: (trackId: string) => invoke<StoredTrack[]>("delete_track", { trackId }),
     removeTrackFromPlaylist: (playlistId: string, trackId: string) =>
         invoke<void>("remove_track_from_playlist", { playlistId, trackId }),

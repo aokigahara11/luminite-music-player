@@ -28,4 +28,5 @@ uuid = { version = "1.8", features = ["v4"] }
 rand = "0.8"
 rusqlite = { version = "0.34", features = ["bundled"] }
 rodio = { version = "0.20.1", features = ["symphonia-all"] }
+hound = "3.5.1"
 
