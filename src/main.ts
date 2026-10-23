@@ -16,7 +16,37 @@ import type {
 } from "./types";
 
 const FAVORITES_PLAYLIST_ID = "favorites";
+const AUDIO_SETTINGS_STORAGE_KEY = "luminite-audio-settings";
+const EQUALIZER_FREQUENCIES = [60, 150, 400, 1_000, 2_400, 15_000];
+const LEGACY_EQUALIZER_FREQUENCIES = [60, 250, 1_000, 4_000, 12_000];
+const EQUALIZER_PRESETS: Record<string, number[]> = {
+    flat: [0, 0, 0, 0, 0, 0],
+    bassBoost: [7, 5, 2, 0, 0, 0],
+    bassCut: [-6, -4, -1, 0, 0, 0],
+    classical: [0, 0, 0, 2, 3, 4],
+    dance: [5, 3, 0, 2, 4, 5],
+    deep: [7, 4, 1, 0, 2, 3],
+    electronic: [4, 2, -1, 2, 4, 4],
+    hipHop: [6, 4, 1, 2, 3, 2],
+    jazz: [3, 2, 0, 2, 3, 4],
+    latin: [4, 2, 0, 2, 3, 3],
+    loudness: [5, 3, 0, 0, 3, 5],
+    lounge: [2, 2, 1, 1, 2, 3],
+    piano: [1, 1, 0, 2, 3, 2],
+    pop: [2, 3, 1, 2, 3, 2],
+    rnb: [4, 3, 0, 1, 3, 4],
+    rock: [4, 2, 0, 3, 4, 3],
+    smallSpeakers: [-3, 3, 5, 4, 2, 0],
+    speech: [-4, -2, 3, 5, 3, -2],
+    trebleBoost: [0, 0, 0, 2, 5, 7],
+    trebleCut: [0, 0, 0, -2, -5, -7],
+    vocal: [-2, 0, 3, 5, 3, 1],
+};
 type RemixSpeed = "normal" | "slowed" | "speed_up";
+interface AudioSettings {
+    equalizer: number[];
+    transitionDuration: number;
+}
 
 let audioStatus: AudioStatus = {
     positionSecs: 0,
@@ -31,6 +61,102 @@ let playerSaveQueue: Promise<void> = Promise.resolve();
 let recentSaveQueue: Promise<void> = Promise.resolve();
 let toastTimer: number | undefined;
 let toastHideTimer: number | undefined;
+let transitionCheckedForTrackId: string | null = null;
+let transitionPendingForTrackId: string | null = null;
+let audioSettings: AudioSettings = {
+    equalizer: [...EQUALIZER_PRESETS.flat],
+    transitionDuration: 0,
+};
+
+function renderAudioSettings() {
+    elements.equalizerBands.querySelectorAll<HTMLInputElement>("[data-eq-band]").forEach((slider) => {
+        const index = Number(slider.dataset.eqBand);
+        const gain = audioSettings.equalizer[index];
+        slider.value = gain.toString();
+        slider.nextElementSibling!.textContent = `${gain > 0 ? "+" : ""}${gain} дБ`;
+    });
+
+    const preset = Object.entries(EQUALIZER_PRESETS)
+        .find(([, gains]) => gains.every((gain, index) => gain === audioSettings.equalizer[index]));
+    elements.equalizerPreset.value = preset?.[0] ?? "custom";
+    elements.transitionDuration.value = audioSettings.transitionDuration.toString();
+    elements.transitionDurationValue.textContent = audioSettings.transitionDuration === 0
+        ? "Выкл."
+        : `${audioSettings.transitionDuration.toFixed(1)} сек.`;
+    elements.settingsStatus.textContent = "Настройки сохраняются автоматически на этом устройстве.";
+}
+
+function saveAudioSettings() {
+    try {
+        localStorage.setItem(AUDIO_SETTINGS_STORAGE_KEY, JSON.stringify(audioSettings));
+    } catch (error) {
+        console.error("Не удалось сохранить настройки звука:", error);
+        showToast("Не удалось сохранить настройки звука", true);
+    }
+}
+
+function applyEqualizer() {
+    void api.setEqualizer(audioSettings.equalizer).catch((error) => {
+        console.error("Не удалось применить эквалайзер:", error);
+        showToast(`Не удалось применить эквалайзер: ${String(error)}`, true);
+    });
+}
+
+function applyTransitionDuration() {
+    void api.setTransitionDuration(audioSettings.transitionDuration).catch((error) => {
+        console.error("Не удалось применить переходы:", error);
+        showToast(`Не удалось применить переходы: ${String(error)}`, true);
+    });
+}
+
+async function loadAudioSettings() {
+    try {
+        const stored = localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+        if (stored) {
+            const parsed: unknown = JSON.parse(stored);
+            if (typeof parsed === "object" && parsed !== null) {
+                const candidate = parsed as Partial<AudioSettings>;
+                if (
+                    Array.isArray(candidate.equalizer)
+                    && (candidate.equalizer.length === EQUALIZER_FREQUENCIES.length
+                        || candidate.equalizer.length === LEGACY_EQUALIZER_FREQUENCIES.length)
+                    && candidate.equalizer.every((gain) => typeof gain === "number" && Number.isFinite(gain))
+                ) {
+                    const savedGains = candidate.equalizer;
+                    audioSettings.equalizer = savedGains.length === LEGACY_EQUALIZER_FREQUENCIES.length
+                        ? EQUALIZER_FREQUENCIES.map((frequency) => {
+                            if (frequency <= LEGACY_EQUALIZER_FREQUENCIES[0]) return savedGains[0];
+                            const lastIndex = LEGACY_EQUALIZER_FREQUENCIES.length - 1;
+                            if (frequency >= LEGACY_EQUALIZER_FREQUENCIES[lastIndex]) return savedGains[lastIndex];
+                            const upperIndex = LEGACY_EQUALIZER_FREQUENCIES.findIndex((bandFrequency) => bandFrequency >= frequency);
+                            const lowerIndex = upperIndex - 1;
+                            const ratio = (Math.log(frequency) - Math.log(LEGACY_EQUALIZER_FREQUENCIES[lowerIndex]))
+                                / (Math.log(LEGACY_EQUALIZER_FREQUENCIES[upperIndex]) - Math.log(LEGACY_EQUALIZER_FREQUENCIES[lowerIndex]));
+                            return savedGains[lowerIndex] + (savedGains[upperIndex] - savedGains[lowerIndex]) * ratio;
+                        }).map((gain) => Math.min(12, Math.max(-12, gain)))
+                        : savedGains.map((gain) => Math.min(12, Math.max(-12, gain)));
+                }
+                if (typeof candidate.transitionDuration === "number" && Number.isFinite(candidate.transitionDuration)) {
+                    audioSettings.transitionDuration = Math.min(8, Math.max(0, candidate.transitionDuration));
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Не удалось загрузить настройки звука:", error);
+        showToast("Не удалось загрузить настройки звука", true);
+    }
+
+    renderAudioSettings();
+    try {
+        await Promise.all([
+            api.setEqualizer(audioSettings.equalizer),
+            api.setTransitionDuration(audioSettings.transitionDuration),
+        ]);
+    } catch (error) {
+        console.error("Не удалось восстановить настройки звука:", error);
+        showToast(`Не удалось восстановить настройки звука: ${String(error)}`, true);
+    }
+}
 
 function savePlayerConfig() {
     const config: PlayerConfig = {
@@ -202,8 +328,8 @@ function updateTrackTextMarquee() {
 function switchView(view: AppState["activeView"]) {
     state.activeView = view;
 
-    [elements.viewMain, elements.viewMediaLibrary, elements.viewPlaylists, elements.viewPlaylistDetail].forEach((sec) => sec?.classList.remove("active"));
-    [elements.mainBtn, elements.mediaLibraryBtn, elements.playlistsBtn].forEach((btn) => btn?.classList.remove("active"));
+    [elements.viewMain, elements.viewMediaLibrary, elements.viewPlaylists, elements.viewSettings, elements.viewPlaylistDetail].forEach((sec) => sec?.classList.remove("active"));
+    [elements.mainBtn, elements.mediaLibraryBtn, elements.playlistsBtn, elements.settingsBtn].forEach((btn) => btn?.classList.remove("active"));
 
     if (view === "main") {
         elements.viewMain?.classList.add("active");
@@ -216,6 +342,9 @@ function switchView(view: AppState["activeView"]) {
         elements.viewPlaylists?.classList.add("active");
         elements.playlistsBtn?.classList.add("active");
         renderPlaylists();
+    } else if (view === "settings") {
+        elements.viewSettings?.classList.add("active");
+        elements.settingsBtn?.classList.add("active");
     } else if (view === "playlist-detail") {
         elements.viewPlaylistDetail?.classList.add("active");
         renderPlaylistDetail();
@@ -544,6 +673,8 @@ async function playTrack(
     const track = state.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
+    transitionCheckedForTrackId = null;
+    transitionPendingForTrackId = null;
     state.playbackQueueTrackIds = [...new Set(queueTrackIds)].filter((id) => state.tracks.some((item) => item.id === id));
     if (!state.playbackQueueTrackIds.includes(trackId)) state.playbackQueueTrackIds.push(trackId);
     state.playbackQueuePlaylistId = queuePlaylistId;
@@ -754,21 +885,25 @@ function toggleShuffle() {
     updatePlaybackModeButtons();
 }
 
-async function playNextTrack(naturalEnd = false) {
+async function playNextTrack(naturalEnd = false, knownNextTrackId?: string | null) {
     const queueTrackIds = getPlaybackQueueTrackIds();
     if (!queueTrackIds.length) return;
-    const nextTrackId = await api.getNextTrackId({
-        trackIds: queueTrackIds,
-        currentTrackId: state.currentTrackId,
-        repeatMode: state.repeatMode,
-        shuffleEnabled: state.shuffleEnabled,
-        naturalEnd,
-    });
+    const nextTrackId = knownNextTrackId === undefined
+        ? await api.getNextTrackId({
+            trackIds: queueTrackIds,
+            currentTrackId: state.currentTrackId,
+            repeatMode: state.repeatMode,
+            shuffleEnabled: state.shuffleEnabled,
+            naturalEnd,
+        })
+        : knownNextTrackId;
     if (nextTrackId) {
         if (naturalEnd && nextTrackId === state.currentTrackId) {
             const track = state.tracks.find((item) => item.id === nextTrackId);
             if (track) {
                 try {
+                    transitionCheckedForTrackId = null;
+                    transitionPendingForTrackId = null;
                     audioStatus = await api.playAudio(track.path, 0, true, audioStatus.volume);
                     state.isPlaying = audioStatus.isPlaying;
                     updatePlayButtonIcon();
@@ -782,6 +917,7 @@ async function playNextTrack(naturalEnd = false) {
             await playTrack(nextTrackId, queueTrackIds, state.playbackQueuePlaylistId);
         }
     } else if (naturalEnd) {
+        transitionPendingForTrackId = null;
         state.isPlaying = false;
         updatePlayButtonIcon();
         renderActiveTrackList();
@@ -795,6 +931,43 @@ function getPlaybackQueueTrackIds() {
         : undefined;
     const trackIds = sourcePlaylist?.trackIds ?? state.playbackQueueTrackIds;
     return [...new Set(trackIds)].filter((id) => state.tracks.some((track) => track.id === id));
+}
+
+async function maybeStartTrackTransition(status: AudioStatus) {
+    const trackId = state.currentTrackId;
+    if (!trackId || !state.isPlaying || audioSettings.transitionDuration <= 0 || status.durationSecs <= 0) {
+        transitionCheckedForTrackId = null;
+        transitionPendingForTrackId = null;
+        return;
+    }
+
+    const transitionLength = Math.min(audioSettings.transitionDuration, status.durationSecs / 2);
+    if (status.positionSecs < status.durationSecs - transitionLength) {
+        if (transitionCheckedForTrackId === trackId) transitionCheckedForTrackId = null;
+        return;
+    }
+    if (transitionCheckedForTrackId === trackId) return;
+
+    transitionCheckedForTrackId = trackId;
+    try {
+        const nextTrackId = await api.getNextTrackId({
+            trackIds: getPlaybackQueueTrackIds(),
+            currentTrackId: trackId,
+            repeatMode: state.repeatMode,
+            shuffleEnabled: state.shuffleEnabled,
+            naturalEnd: true,
+        });
+        if (state.currentTrackId !== trackId || !state.isPlaying) return;
+        if (nextTrackId) {
+            transitionPendingForTrackId = trackId;
+            await playNextTrack(true, nextTrackId);
+        }
+    } catch (error) {
+        transitionCheckedForTrackId = null;
+        transitionPendingForTrackId = null;
+        console.error("Не удалось начать переход к следующему треку:", error);
+        showToast(`Не удалось начать переход: ${String(error)}`, true);
+    }
 }
 
 async function playPrevTrack() {
@@ -1067,12 +1240,17 @@ async function initEvents() {
                 updatePlayButtonIcon();
                 renderActiveTrackList();
             }
-            if (payload.ended) void playNextTrack(true);
+            void maybeStartTrackTransition(payload);
+            if (payload.ended && transitionPendingForTrackId !== state.currentTrackId) {
+                void playNextTrack(true);
+            }
         });
     } catch (error) {
         console.error("Не удалось подписаться на состояние аудио:", error);
         showToast("Не удалось подключить управление аудио", true);
     }
+
+    await loadAudioSettings();
 
     window.addEventListener("resize", updateTrackTextMarquee);
     document.addEventListener("click", () => {
@@ -1095,6 +1273,7 @@ async function initEvents() {
     elements.mainBtn?.addEventListener("click", () => switchView("main"));
     elements.mediaLibraryBtn?.addEventListener("click", () => switchView("media-library"));
     elements.playlistsBtn?.addEventListener("click", () => switchView("playlists"));
+    elements.settingsBtn?.addEventListener("click", () => switchView("settings"));
     const openCardFromKeyboard = (event: KeyboardEvent, open: () => void) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
@@ -1266,6 +1445,36 @@ async function initEvents() {
         }).catch((error) => {
             showToast(`Не удалось изменить громкость: ${String(error)}`, true);
         });
+    });
+
+    elements.equalizerPreset?.addEventListener("change", () => {
+        const preset = EQUALIZER_PRESETS[elements.equalizerPreset.value];
+        if (!preset) return;
+        audioSettings.equalizer = [...preset];
+        renderAudioSettings();
+        saveAudioSettings();
+        applyEqualizer();
+    });
+    elements.equalizerBands?.querySelectorAll<HTMLInputElement>("[data-eq-band]").forEach((slider) => {
+        slider.addEventListener("input", () => {
+            const index = Number(slider.dataset.eqBand);
+            audioSettings.equalizer[index] = Number(slider.value);
+            renderAudioSettings();
+            saveAudioSettings();
+            applyEqualizer();
+        });
+    });
+    elements.equalizerResetBtn?.addEventListener("click", () => {
+        audioSettings.equalizer = [...EQUALIZER_PRESETS.flat];
+        renderAudioSettings();
+        saveAudioSettings();
+        applyEqualizer();
+    });
+    elements.transitionDuration?.addEventListener("input", () => {
+        audioSettings.transitionDuration = Number(elements.transitionDuration.value);
+        renderAudioSettings();
+        saveAudioSettings();
+        applyTransitionDuration();
     });
 
     // Поиск

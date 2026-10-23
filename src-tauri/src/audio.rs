@@ -1,16 +1,20 @@
 use std::{
     fs::File,
     path::{Path, PathBuf},
-    sync::mpsc::{self, Receiver, Sender, SyncSender},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        mpsc::{self, Receiver, Sender, SyncSender},
+        Arc,
+    },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
+use crate::{commands::tracks::import_generated_track, database::core::Database, models::Track};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
-use crate::{commands::tracks::import_generated_track, database::core::Database, models::Track};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +47,14 @@ enum AudioCommand {
         volume: f64,
         reply: SyncSender<Result<AudioStatus, String>>,
     },
+    SetEqualizer {
+        gains: [f32; 6],
+        reply: SyncSender<Result<AudioStatus, String>>,
+    },
+    SetTransitionDuration {
+        duration_secs: f64,
+        reply: SyncSender<Result<AudioStatus, String>>,
+    },
 }
 
 impl AudioCommand {
@@ -54,7 +66,9 @@ impl AudioCommand {
             | Self::Resume(reply)
             | Self::Stop(reply)
             | Self::Seek { reply, .. }
-            | Self::SetVolume { reply, .. } => reply,
+            | Self::SetVolume { reply, .. }
+            | Self::SetEqualizer { reply, .. }
+            | Self::SetTransitionDuration { reply, .. } => reply,
         }
     }
 }
@@ -89,11 +103,163 @@ impl AudioEngine {
     }
 }
 
+const EQUALIZER_FREQUENCIES: [f32; 6] = [60.0, 150.0, 400.0, 1_000.0, 2_400.0, 15_000.0];
+
+struct EqualizerSource<S> {
+    input: S,
+    gains: Arc<[AtomicU32; 6]>,
+    filters: Vec<[Biquad; 6]>,
+    channel_index: usize,
+}
+
+impl<S> EqualizerSource<S>
+where
+    S: Source<Item = f32>,
+{
+    fn new(input: S, gains: Arc<[AtomicU32; 6]>) -> Self {
+        let channels = input.channels().max(1) as usize;
+        Self {
+            input,
+            gains,
+            filters: (0..channels)
+                .map(|_| std::array::from_fn(|_| Biquad::default()))
+                .collect(),
+            channel_index: 0,
+        }
+    }
+}
+
+impl<S> Iterator for EqualizerSource<S>
+where
+    S: Source<Item = f32>,
+{
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut sample = self.input.next()?;
+        let channel = self.channel_index;
+        self.channel_index = (self.channel_index + 1) % self.filters.len();
+        let sample_rate = self.input.sample_rate() as f32;
+        let filters = &mut self.filters[channel];
+
+        for (index, filter) in filters.iter_mut().enumerate() {
+            let gain = f32::from_bits(self.gains[index].load(Ordering::Relaxed)).clamp(-12.0, 12.0);
+            if filter.gain_db != gain {
+                filter.configure(EQUALIZER_FREQUENCIES[index], gain, sample_rate);
+            }
+            sample = filter.process(sample);
+        }
+        Some(sample)
+    }
+}
+
+impl<S> Source for EqualizerSource<S>
+where
+    S: Source<Item = f32>,
+{
+    fn current_frame_len(&self) -> Option<usize> {
+        self.input.current_frame_len()
+    }
+
+    fn channels(&self) -> u16 {
+        self.input.channels()
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.input.sample_rate()
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        self.input.total_duration()
+    }
+
+    fn try_seek(&mut self, position: Duration) -> Result<(), rodio::source::SeekError> {
+        self.input.try_seek(position)?;
+        for filters in &mut self.filters {
+            for filter in filters {
+                filter.reset();
+            }
+        }
+        self.channel_index = 0;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Biquad {
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
+    x1: f32,
+    x2: f32,
+    y1: f32,
+    y2: f32,
+    gain_db: f32,
+}
+
+impl Default for Biquad {
+    fn default() -> Self {
+        Self {
+            b0: 1.0,
+            b1: 0.0,
+            b2: 0.0,
+            a1: 0.0,
+            a2: 0.0,
+            x1: 0.0,
+            x2: 0.0,
+            y1: 0.0,
+            y2: 0.0,
+            gain_db: f32::INFINITY,
+        }
+    }
+}
+
+impl Biquad {
+    fn configure(&mut self, frequency: f32, gain_db: f32, sample_rate: f32) {
+        let frequency = frequency.min(sample_rate * 0.45);
+        let omega = 2.0 * std::f32::consts::PI * frequency / sample_rate;
+        let alpha = omega.sin() / 2.0;
+        let amplitude = 10.0_f32.powf(gain_db / 40.0);
+        let a0 = 1.0 + alpha / amplitude;
+
+        self.b0 = (1.0 + alpha * amplitude) / a0;
+        self.b1 = (-2.0 * omega.cos()) / a0;
+        self.b2 = (1.0 - alpha * amplitude) / a0;
+        self.a1 = (-2.0 * omega.cos()) / a0;
+        self.a2 = (1.0 - alpha / amplitude) / a0;
+        self.gain_db = gain_db;
+    }
+
+    fn process(&mut self, input: f32) -> f32 {
+        let output = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
+            - self.a1 * self.y1
+            - self.a2 * self.y2;
+        self.x2 = self.x1;
+        self.x1 = input;
+        self.y2 = self.y1;
+        self.y1 = output;
+        output
+    }
+
+    fn reset(&mut self) {
+        self.x1 = 0.0;
+        self.x2 = 0.0;
+        self.y1 = 0.0;
+        self.y2 = 0.0;
+    }
+}
+
 struct AudioWorker {
     app: AppHandle,
     _output_stream: Option<OutputStream>,
     output_handle: Option<OutputStreamHandle>,
     sink: Option<Sink>,
+    transition_sink: Option<Sink>,
+    transition_started: Option<Instant>,
+    transition_duration: f64,
+    equalizer_gains: Arc<[AtomicU32; 6]>,
     track_path: Option<PathBuf>,
     duration_secs: f64,
     volume: f64,
@@ -142,6 +308,7 @@ impl AudioWorker {
                 ..
             } => self.load_track(path, position_secs, should_play, volume)?,
             AudioCommand::Pause(_) => {
+                self.finish_transition();
                 if let Some(sink) = &self.sink {
                     sink.pause();
                 }
@@ -158,6 +325,7 @@ impl AudioWorker {
                 }
             }
             AudioCommand::Stop(_) => {
+                self.finish_transition();
                 if let Some(sink) = self.sink.take() {
                     sink.stop();
                 }
@@ -197,6 +365,22 @@ impl AudioWorker {
                 };
                 if let Some(sink) = &self.sink {
                     sink.set_volume(self.volume as f32);
+                }
+                self.update_transition();
+            }
+            AudioCommand::SetEqualizer { gains, .. } => {
+                for (stored, gain) in self.equalizer_gains.iter().zip(gains) {
+                    stored.store(gain.clamp(-12.0, 12.0).to_bits(), Ordering::Relaxed);
+                }
+            }
+            AudioCommand::SetTransitionDuration { duration_secs, .. } => {
+                self.transition_duration = if duration_secs.is_finite() {
+                    duration_secs.clamp(0.0, 8.0)
+                } else {
+                    self.transition_duration
+                };
+                if self.transition_duration == 0.0 {
+                    self.finish_transition();
                 }
             }
         }
@@ -239,8 +423,11 @@ impl AudioWorker {
             .ok_or_else(|| "Аудиоустройство не инициализировано".to_string())?;
         let sink = Sink::try_new(output_handle)
             .map_err(|error| format!("Не удалось создать аудиопоток: {error}"))?;
-        sink.set_volume(volume as f32);
-        sink.append(decoder);
+        sink.set_volume(0.0);
+        sink.append(EqualizerSource::new(
+            decoder.convert_samples::<f32>(),
+            Arc::clone(&self.equalizer_gains),
+        ));
 
         let position = if position_secs.is_finite() {
             position_secs.clamp(0.0, 3_155_760_000.0)
@@ -259,8 +446,23 @@ impl AudioWorker {
         if !should_play {
             sink.pause();
         }
+        self.finish_transition();
         if let Some(previous_sink) = self.sink.take() {
-            previous_sink.stop();
+            if should_play
+                && !previous_sink.is_paused()
+                && !previous_sink.empty()
+                && self.transition_duration > 0.0
+            {
+                previous_sink.set_volume(volume as f32);
+                sink.set_volume(0.0);
+                self.transition_sink = Some(previous_sink);
+                self.transition_started = Some(Instant::now());
+            } else {
+                previous_sink.stop();
+                sink.set_volume(volume as f32);
+            }
+        } else {
+            sink.set_volume(volume as f32);
         }
         self.sink = Some(sink);
         self.track_path = Some(path);
@@ -270,6 +472,32 @@ impl AudioWorker {
         self.end_when_empty = should_play;
         self.volume = volume;
         Ok(())
+    }
+
+    fn update_transition(&mut self) {
+        let (Some(started), Some(previous_sink)) =
+            (self.transition_started, self.transition_sink.as_ref())
+        else {
+            return;
+        };
+        let progress = (started.elapsed().as_secs_f64() / self.transition_duration).clamp(0.0, 1.0);
+        previous_sink.set_volume((self.volume * (1.0 - progress)) as f32);
+        if let Some(sink) = &self.sink {
+            sink.set_volume((self.volume * progress) as f32);
+        }
+        if progress >= 1.0 {
+            self.finish_transition();
+        }
+    }
+
+    fn finish_transition(&mut self) {
+        if let Some(previous_sink) = self.transition_sink.take() {
+            previous_sink.stop();
+        }
+        self.transition_started = None;
+        if let Some(sink) = &self.sink {
+            sink.set_volume(self.volume as f32);
+        }
     }
 
     // Отправляет интерфейсу состояние плеера и однократное уведомление о конце трека.
@@ -296,6 +524,10 @@ fn run_worker(receiver: Receiver<AudioCommand>, app: AppHandle) {
         _output_stream: None,
         output_handle: None,
         sink: None,
+        transition_sink: None,
+        transition_started: None,
+        transition_duration: 0.0,
+        equalizer_gains: Arc::new(std::array::from_fn(|_| AtomicU32::new(0.0_f32.to_bits()))),
         track_path: None,
         duration_secs: 0.0,
         volume: 0.7,
@@ -303,9 +535,10 @@ fn run_worker(receiver: Receiver<AudioCommand>, app: AppHandle) {
         ended_emitted: false,
         end_when_empty: false,
     };
+    let mut last_status_emit = Instant::now();
 
     loop {
-        match receiver.recv_timeout(Duration::from_millis(200)) {
+        match receiver.recv_timeout(Duration::from_millis(20)) {
             Ok(command) => {
                 let reply = command.reply().clone();
                 let result = worker.process(command);
@@ -316,8 +549,15 @@ fn run_worker(receiver: Receiver<AudioCommand>, app: AppHandle) {
                     eprintln!("Интерфейс закрыл запрос к аудиодвижку до получения ответа");
                 }
                 worker.emit_status();
+                last_status_emit = Instant::now();
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => worker.emit_status(),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                worker.update_transition();
+                if last_status_emit.elapsed() >= Duration::from_millis(200) {
+                    worker.emit_status();
+                    last_status_emit = Instant::now();
+                }
+            }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
@@ -378,6 +618,47 @@ pub fn set_audio_volume(
     volume: f64,
 ) -> Result<AudioStatus, String> {
     engine.request(|reply| AudioCommand::SetVolume { volume, reply })
+}
+
+// Устанваливает эквалайзер
+#[tauri::command]
+pub fn set_equalizer(
+    engine: State<'_, AudioEngine>,
+    gains: [f32; 6],
+) -> Result<AudioStatus, String> {
+    if gains.iter().any(|gain| !gain.is_finite()) {
+        return Err("Значения эквалайзера должны быть конечными числами".to_string());
+    }
+    engine.request(|reply| AudioCommand::SetEqualizer { gains, reply })
+}
+
+#[tauri::command]
+pub fn set_transition_duration(
+    engine: State<'_, AudioEngine>,
+    duration_secs: f64,
+) -> Result<AudioStatus, String> {
+    engine.request(|reply| AudioCommand::SetTransitionDuration {
+        duration_secs,
+        reply,
+    })
+}
+
+#[cfg(test)]
+mod equalizer_tests {
+    use super::Biquad;
+
+    #[test]
+    fn zero_gain_is_transparent_and_positive_gain_boosts() {
+        let mut flat = Biquad::default();
+        flat.configure(1_000.0, 0.0, 48_000.0);
+        for sample in [-0.5, 0.25, 0.75, -0.125] {
+            assert!((flat.process(sample) - sample).abs() < 0.00001);
+        }
+
+        let mut boosted = Biquad::default();
+        boosted.configure(1_000.0, 6.0, 48_000.0);
+        assert!(boosted.process(1.0) > 1.0);
+    }
 }
 
 pub struct AutoPan<I> {
@@ -513,7 +794,7 @@ where
 
         let delayed = self.delay_buffer[self.buffer_position];
         self.delay_buffer[self.buffer_position] = sample + delayed * self.amplitude;
-        
+
         Some(sample * 0.75 + delayed * self.amplitude * 0.4)
     }
 }
@@ -545,6 +826,7 @@ where
     }
 }
 
+// Рендер ремикса
 fn render_remix(
     file_path: &Path,
     track_title: &str,
@@ -671,6 +953,7 @@ fn render_remix(
     Ok(output_path)
 }
 
+// Создание и рендер ремикса
 #[tauri::command]
 pub fn create_and_render_remix(
     database: State<'_, Database>,

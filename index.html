@@ -73,6 +73,15 @@
               <span>Плейлисты</span>
             </button>
           </div>
+
+          <!-- Настройки -->
+          <button class="btn-ctrl" id="settings-btn" title="Настройки">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span>Настройки</span>
+          </button>
         </div>
       </aside>
 
@@ -244,6 +253,97 @@
           </div>
 
           <div class="cards-grid"></div>
+        </section>
+
+        <!-- Секция: Настройки -->
+        <section class="settings-section view-section" id="view-settings">
+          <div class="section-header-row">
+            <h2 class="section-title">Настройки</h2>
+          </div>
+          
+          <div class="settings-grid">
+            <section class="settings-card" aria-labelledby="equalizer-title">
+              <div class="settings-card-heading">
+                <div>
+                  <h3 id="equalizer-title">Многополосный эквалайзер</h3>
+                  <p>Тонкая настройка частот и звуковых пресетов</p>
+                </div>
+                <label class="settings-preset">
+                  <span>Пресет</span>
+                  <select id="equalizer-preset">
+                    <option value="flat">Ровный</option>
+                    <option value="bassBoost">Усиление басов</option>
+                    <option value="bassCut">Ослабление басов</option>
+                    <option value="classical">Классика</option>
+                    <option value="dance">Dance</option>
+                    <option value="deep">Глубокое звучание</option>
+                    <option value="electronic">Электронная музыка</option>
+                    <option value="hipHop">Хип-хоп</option>
+                    <option value="jazz">Джаз</option>
+                    <option value="latin">Латино</option>
+                    <option value="loudness">Громкость звука</option>
+                    <option value="lounge">Лаундж</option>
+                    <option value="piano">Фортепиано</option>
+                    <option value="pop">Поп</option>
+                    <option value="rnb">R&amp;B</option>
+                    <option value="rock">Рок-музыка</option>
+                    <option value="smallSpeakers">Маленькие динамики</option>
+                    <option value="speech">Речь</option>
+                    <option value="trebleBoost">Усиление высоких частот</option>
+                    <option value="trebleCut">Ослабление высоких частот</option>
+                    <option value="vocal">Усиление вокала</option>
+                    <option value="custom" disabled>Своя настройка</option>
+                  </select>
+                </label>
+              </div>
+              <div class="equalizer-bands" id="equalizer-bands">
+                <label class="equalizer-band">
+                  <span>60 Гц</span>
+                  <input type="range" min="-12" max="12" step="1" value="0" data-eq-band="0" aria-label="Эквалайзер 60 герц" />
+                  <output>0 дБ</output>
+                </label>
+                <label class="equalizer-band">
+                  <span>150 Гц</span>
+                  <input type="range" min="-12" max="12" step="1" value="0" data-eq-band="1" aria-label="Эквалайзер 150 герц" />
+                  <output>0 дБ</output>
+                </label>
+                <label class="equalizer-band">
+                  <span>400 Гц</span>
+                  <input type="range" min="-12" max="12" step="1" value="0" data-eq-band="2" aria-label="Эквалайзер 400 герц" />
+                  <output>0 дБ</output>
+                </label>
+                <label class="equalizer-band">
+                  <span>1 кГц</span>
+                  <input type="range" min="-12" max="12" step="1" value="0" data-eq-band="3" aria-label="Эквалайзер 1 килогерц" />
+                  <output>0 дБ</output>
+                </label>
+                <label class="equalizer-band">
+                  <span>2,4 кГц</span>
+                  <input type="range" min="-12" max="12" step="1" value="0" data-eq-band="4" aria-label="Эквалайзер 2,4 килогерца" />
+                  <output>0 дБ</output>
+                </label>
+                <label class="equalizer-band">
+                  <span>15 кГц</span>
+                  <input type="range" min="-12" max="12" step="1" value="0" data-eq-band="5" aria-label="Эквалайзер 15 килогерц" />
+                  <output>0 дБ</output>
+                </label>
+              </div>
+              <button class="settings-reset-button" id="equalizer-reset-btn" type="button">Сбросить эквалайзер</button>
+            </section>
+
+            <section class="settings-card transition-settings" aria-labelledby="transition-title">
+              <div>
+                <h3 id="transition-title">Переходы между треками</h3>
+                <p>Плавное смешивание текущего и следующего трека при переключении.</p>
+              </div>
+              <label class="transition-control" for="transition-duration">
+                <span>Длительность перехода</span>
+                <input id="transition-duration" type="range" min="0" max="8" step="0.5" value="0" />
+                <output id="transition-duration-value" for="transition-duration">Выкл.</output>
+              </label>
+            </section>
+          </div>
+          <p class="settings-status" id="settings-status" role="status" aria-live="polite"></p>
         </section>
 
         <!-- Просмотр конкретного плейлиста -->

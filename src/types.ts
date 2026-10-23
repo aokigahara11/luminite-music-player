@@ -75,7 +75,7 @@ export interface AppState {
     recentItems: RecentEntry[];
     currentTrackId: string | null;
     isPlaying: boolean;
-    activeView: "main" | "media-library" | "playlists" | "playlist-detail";
+    activeView: "main" | "media-library" | "playlists" | "settings" | "playlist-detail";
     selectedPlaylistId: string | null;
     searchQuery: string;
     repeatMode: "off" | "all" | "one";

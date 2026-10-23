@@ -989,10 +989,155 @@ input[type="range"]:hover::-webkit-slider-thumb {
   background: var(--accent);
 }
 
+.settings-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-card {
+  padding: 22px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+}
+
+.settings-card h3 {
+  margin-bottom: 6px;
+  font-size: 17px;
+}
+
+.settings-card p {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-preset {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-preset select {
+  padding: 9px 32px 9px 11px;
+  color: var(--text-main);
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.equalizer-bands {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(60px, 1fr));
+  gap: 20px;
+  margin: 28px 0 20px;
+}
+
+.equalizer-band {
+  display: grid;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.equalizer-band input {
+  accent-color: var(--accent);
+}
+
+.equalizer-band output,
+.transition-control output {
+  color: var(--text-main);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-reset-button {
+  padding: 8px 11px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-reset-button:hover {
+  color: var(--text-main);
+  border-color: var(--accent-border);
+}
+
+.transition-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px 20px;
+  margin-top: 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.transition-control input {
+  grid-column: 1;
+}
+
+.transition-control output {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 52px;
+  text-align: right;
+}
+
+.settings-status {
+  min-height: 18px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .section-title {
   font-size: 28px;
   font-weight: 700;
   margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .equalizer-bands {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 650px) {
+  .settings-card-heading {
+    flex-direction: column;
+  }
+
+  .settings-preset {
+    width: 100%;
+  }
+
+  .equalizer-bands {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .equalizer-band {
+    grid-template-columns: 52px 1fr 48px;
+    align-items: center;
+    text-align: left;
+  }
+
+  .equalizer-band output {
+    text-align: right;
+  }
 }
 
 .section-subtitle {

@@ -45,6 +45,8 @@ pub fn run() {
             audio::stop_audio,
             audio::seek_audio,
             audio::set_audio_volume,
+            audio::set_equalizer,
+            audio::set_transition_duration,
             crate::audio::create_and_render_remix,
             commands::playback::get_next_track_id,
             commands::playback::get_previous_track_id

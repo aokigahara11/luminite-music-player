@@ -19,6 +19,9 @@ export const api = {
     stopAudio: () => invoke<AudioStatus>("stop_audio"),
     seekAudio: (positionSecs: number) => invoke<AudioStatus>("seek_audio", { positionSecs }),
     setAudioVolume: (volume: number) => invoke<AudioStatus>("set_audio_volume", { volume }),
+    setEqualizer: (gains: number[]) => invoke<AudioStatus>("set_equalizer", { gains }),
+    setTransitionDuration: (durationSecs: number) =>
+        invoke<AudioStatus>("set_transition_duration", { durationSecs }),
     getLibrary: () => invoke<StoredTrack[]>("get_library"),
     getPlaylists: () => invoke<StoredPlaylist[]>("get_playlists"),
     getCovers: () => invoke<StoredCover[]>("get_covers"),
