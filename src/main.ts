@@ -9,6 +9,7 @@ import type {
     AppState,
     AudioStatus,
     CoverKind,
+    DownloadProgress,
     PlayerConfig,
     PlaylistCategory,
     RecentItemKind,
@@ -328,8 +329,8 @@ function updateTrackTextMarquee() {
 function switchView(view: AppState["activeView"]) {
     state.activeView = view;
 
-    [elements.viewMain, elements.viewMediaLibrary, elements.viewPlaylists, elements.viewSettings, elements.viewPlaylistDetail].forEach((sec) => sec?.classList.remove("active"));
-    [elements.mainBtn, elements.mediaLibraryBtn, elements.playlistsBtn, elements.settingsBtn].forEach((btn) => btn?.classList.remove("active"));
+    [elements.viewMain, elements.viewMediaLibrary, elements.viewPlaylists, elements.viewSettings, elements.viewDownloader, elements.viewPlaylistDetail].forEach((sec) => sec?.classList.remove("active"));
+    [elements.mainBtn, elements.mediaLibraryBtn, elements.playlistsBtn, elements.settingsBtn, elements.downloaderBtn].forEach((btn) => btn?.classList.remove("active"));
 
     if (view === "main") {
         elements.viewMain?.classList.add("active");
@@ -345,6 +346,9 @@ function switchView(view: AppState["activeView"]) {
     } else if (view === "settings") {
         elements.viewSettings?.classList.add("active");
         elements.settingsBtn?.classList.add("active");
+    } else if (view === "downloader") {
+        elements.viewDownloader?.classList.add("active");
+        elements.downloaderBtn?.classList.add("active");
     } else if (view === "playlist-detail") {
         elements.viewPlaylistDetail?.classList.add("active");
         renderPlaylistDetail();
@@ -663,6 +667,142 @@ function updateFavoriteButton() {
 function updateHomeFavoritesCount() {
     const favorites = state.playlists.find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID);
     if (favorites) elements.homeFavoritesCount.textContent = `${favorites.trackIds.length} треков`;
+}
+
+async function importDownloadedTracks(result: Awaited<ReturnType<typeof api.downloadTracks>>) {
+    const importedTracks: Track[] = [];
+    let failedCovers = 0;
+    for (const downloadedFile of result.files) {
+        const storedTrack = await api.importTrack(downloadedFile.path);
+        const track = mapStoredTrack(storedTrack);
+        state.tracks.push(track);
+        importedTracks.push(track);
+        if (!state.playbackQueuePlaylistId) state.playbackQueueTrackIds.push(track.id);
+
+        if (downloadedFile.coverPath) {
+            try {
+                const storedCover = await api.setCover("track", track.id, downloadedFile.coverPath);
+                track.cover = mapStoredCover(storedCover).src;
+            } catch (error) {
+                console.error(`Не удалось сохранить обложку трека «${track.title}»:`, error);
+                failedCovers += 1;
+            }
+        }
+    }
+
+    if (result.isCollection && importedTracks.length > 1) {
+        const artists = new Set(
+            importedTracks
+                .map((track) => track.artist.trim().toLocaleLowerCase())
+                .filter((artist) => artist && artist !== "неизвестный исполнитель"),
+        );
+        const hasUnknownArtist = importedTracks.some((track) =>
+            !track.artist.trim() || track.artist.trim().toLocaleLowerCase() === "неизвестный исполнитель",
+        );
+        const sameArtist = artists.size === 1 && !hasUnknownArtist;
+        const category: PlaylistCategory = sameArtist
+            ? importedTracks.length < 6 ? "EP" : "Альбом"
+            : "Плейлист";
+        const title = result.collectionTitle?.trim()
+            || (sameArtist ? importedTracks[0].artist : "Загруженный плейлист");
+        const storedPlaylist = await api.createPlaylist(title, category);
+        const playlist = mapStoredPlaylist(storedPlaylist);
+
+        try {
+            for (const track of importedTracks) {
+                await api.addTrackToPlaylist(playlist.id, track.id);
+                playlist.trackIds.push(track.id);
+            }
+
+            const coverPath = result.files.find((file) => file.coverPath)?.coverPath;
+            if (coverPath) {
+                try {
+                    const storedCover = await api.setCover("playlist", playlist.id, coverPath);
+                    playlist.cover = mapStoredCover(storedCover).src;
+                } catch (error) {
+                    console.error(`Не удалось сохранить обложку «${playlist.title}»:`, error);
+                    failedCovers += 1;
+                }
+            }
+        } catch (error) {
+            try {
+                await api.deletePlaylist(playlist.id);
+            } catch (cleanupError) {
+                console.error("Не удалось удалить незавершённый плейлист:", cleanupError);
+            }
+            throw error;
+        }
+        state.playlists.push(playlist);
+        renderPlaylists();
+    }
+
+    renderMediaLibrary();
+    renderRecentlyPlayed();
+    return { importedCount: importedTracks.length, failedCovers };
+}
+
+async function handleDownload(event: SubmitEvent) {
+    event.preventDefault();
+    if (!elements.downloadForm.reportValidity()) return;
+
+    elements.downloadSubmitBtn.disabled = true;
+    elements.downloadProgress.hidden = false;
+    elements.downloadProgress.value = 0;
+    elements.downloadStatus.textContent = "Получаем информацию и запускаем yt-dlp…";
+    let downloadId: string | null = null;
+    let stopListening: (() => void) | null = null;
+
+    try {
+        stopListening = await listen<DownloadProgress>("download-progress", ({ payload }) => {
+            const stageMessages: Record<DownloadProgress["stage"], string> = {
+                preparing: "Проверяем ссылку и готовим загрузку…",
+                downloading: "Скачиваем аудио…",
+                converting: "Конвертируем аудио в MP3…",
+                finalizing: "Добавляем метаданные и обложку…",
+            };
+            elements.downloadStatus.textContent = payload.stage === "downloading" && payload.percentage !== null
+                ? `${stageMessages.downloading} ${Math.round(payload.percentage)}%`
+                : stageMessages[payload.stage];
+            if (payload.percentage !== null) {
+                elements.downloadProgress.value = payload.percentage;
+            }
+        });
+
+        const result = await api.downloadTracks(elements.downloadUrl.value);
+
+        downloadId = result.downloadId;
+        elements.downloadStatus.textContent = "Добавляем аудиофайлы в медиатеку…";
+        const { importedCount, failedCovers } = await importDownloadedTracks(result);
+        const importedMessage = importedCount === 1
+            ? "Трек добавлен в медиатеку."
+            : `Добавлено треков: ${importedCount}.`;
+        elements.downloadStatus.textContent = failedCovers
+            ? `${importedMessage} Не удалось сохранить обложки: ${failedCovers}.`
+            : importedMessage;
+        elements.downloadProgress.value = 100;
+        elements.downloadUrl.value = "";
+        showToast(
+            failedCovers
+                ? `${importedMessage} Ошибок обложек: ${failedCovers}.`
+                : importedCount === 1 ? "Трек добавлен в медиатеку" : `Добавлено треков: ${importedCount}`,
+            failedCovers > 0,
+        );
+    } catch (error) {
+        console.error("Не удалось загрузить аудио:", error);
+        elements.downloadStatus.textContent = `Ошибка загрузки: ${String(error)}`;
+        showToast(`Не удалось загрузить аудио: ${String(error)}`, true);
+    } finally {
+        stopListening?.();
+        if (downloadId) {
+            try {
+                await api.cleanupDownload(downloadId);
+            } catch (error) {
+                console.error("Не удалось очистить временные файлы загрузки:", error);
+                showToast(`Не удалось удалить временные файлы: ${String(error)}`, true);
+            }
+        }
+        elements.downloadSubmitBtn.disabled = false;
+    }
 }
 
 async function playTrack(
@@ -1274,6 +1414,7 @@ async function initEvents() {
     elements.mediaLibraryBtn?.addEventListener("click", () => switchView("media-library"));
     elements.playlistsBtn?.addEventListener("click", () => switchView("playlists"));
     elements.settingsBtn?.addEventListener("click", () => switchView("settings"));
+    elements.downloaderBtn?.addEventListener("click", () => switchView("downloader"));
     const openCardFromKeyboard = (event: KeyboardEvent, open: () => void) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
@@ -1294,6 +1435,30 @@ async function initEvents() {
     elements.addTrackBtn?.addEventListener("click", addTrackHandler);
     elements.libraryAddTrackBtn?.addEventListener("click", addTrackHandler);
     elements.emptyScanBtn?.addEventListener("click", addTrackHandler);
+    elements.downloadForm?.addEventListener("submit", (event) => void handleDownload(event));
+    elements.downloadInfo?.addEventListener("click", () => {
+        openModal(elements.infoDownloaderModal);
+        elements.closeInfoDownloaderModalBtn.focus();
+    });
+    elements.closeInfoDownloaderModalBtn?.addEventListener("click", () => {
+        closeModal(elements.infoDownloaderModal);
+        elements.downloadInfo.focus();
+    });
+    elements.infoDownloaderModal?.addEventListener("click", (event) => {
+        if (event.target === elements.infoDownloaderModal) {
+            closeModal(elements.infoDownloaderModal);
+            elements.downloadInfo.focus();
+        }
+    });
+    elements.infoDownloaderModal?.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+            closeModal(elements.infoDownloaderModal);
+            elements.downloadInfo.focus();
+        } else if (event.key === "Tab") {
+            event.preventDefault();
+            elements.closeInfoDownloaderModalBtn.focus();
+        }
+    });
 
     // Создание плейлистов
     const openPlModal = openCreatePlaylistModal;

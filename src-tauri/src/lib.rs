@@ -11,6 +11,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             let database = Database::open(app_dir).map_err(std::io::Error::other)?;
@@ -35,6 +36,8 @@ pub fn run() {
             commands::playlists::edit_metadata_playlist,
             commands::covers::get_covers,
             commands::covers::set_cover,
+            commands::downloader::download_tracks,
+            commands::downloader::cleanup_download,
             commands::recently_played::get_recently_played,
             commands::recently_played::record_recently_played,
             commands::player_config::get_player_config,

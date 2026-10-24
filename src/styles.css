@@ -1103,6 +1103,116 @@ input[type="range"]:hover::-webkit-slider-thumb {
   font-size: 12px;
 }
 
+.downloader-grid {
+  display: grid;
+}
+
+.downloader-card {
+  padding: 22px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+}
+
+.downloader-card-heading h3 {
+  margin-bottom: 6px;
+  font-size: 17px;
+}
+
+.downloader-card-heading p,
+.download-legal-note {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.downloader-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.download-url-field {
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.download-url-field input {
+  width: 100%;
+  padding: 12px 14px;
+  color: var(--text-main);
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  outline: none;
+}
+
+.download-url-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.download-rights-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.download-rights-confirm input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.download-submit-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: fit-content;
+  padding: 10px 16px;
+  color: #fff;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.download-submit-button:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.download-submit-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.download-progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+.download-status {
+  min-height: 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.download-legal-note {
+  margin-top: 18px;
+  font-size: 11px;
+}
+
 .section-title {
   font-size: 28px;
   font-weight: 700;
@@ -1576,6 +1686,127 @@ input[type="range"]:hover::-webkit-slider-thumb {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.info-downloader-modal-content {
+  width: min(620px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(84vh, 720px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border-color: rgba(96, 165, 250, 0.24);
+  background:
+    radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.12), transparent 48%),
+    var(--bg-elevated);
+}
+
+.info-downloader-modal-content .modal-header {
+  flex: 0 0 auto;
+  gap: 16px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.info-downloader-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.info-downloader-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid var(--accent-border);
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.info-downloader-icon .icon-svg {
+  width: 22px;
+  height: 22px;
+}
+
+.info-downloader-heading h3 {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.info-downloader-heading p {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.info-downloader-modal-content .close-modal-btn {
+  align-self: flex-start;
+}
+
+.info-downloader-body {
+  min-height: 0;
+  padding: 20px 26px 26px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.info-downloader-body .info-section {
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.info-downloader-body .info-section h4 {
+  margin-bottom: 8px;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.info-downloader-body .info-section p,
+.info-downloader-body .info-section li {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.info-downloader-body .info-section strong {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.info-downloader-body .info-section em {
+  color: var(--accent-hover);
+  font-style: normal;
+}
+
+.info-downloader-body .info-section ul {
+  display: grid;
+  gap: 10px;
+  padding-left: 18px;
+}
+
+.info-downloader-body .info-section li::marker {
+  color: var(--accent-hover);
+}
+
+.info-downloader-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.info-downloader-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.info-downloader-body::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 .playlist-category-select {

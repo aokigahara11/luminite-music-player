@@ -3,11 +3,13 @@ export const elements = {
     mediaLibraryBtn: document.getElementById("media-libary-btn") as HTMLButtonElement,
     playlistsBtn: document.getElementById("playlists-btn") as HTMLButtonElement,
     settingsBtn: document.getElementById("settings-btn") as HTMLButtonElement,
+    downloaderBtn: document.getElementById("downloader-btn") as HTMLButtonElement,
 
     viewMain: document.getElementById("view-main") as HTMLElement,
     viewMediaLibrary: document.getElementById("view-media-library") as HTMLElement,
     viewPlaylists: document.getElementById("view-playlists") as HTMLElement,
     viewSettings: document.getElementById("view-settings") as HTMLElement,
+    viewDownloader: document.getElementById("view-downloader") as HTMLElement,
     viewPlaylistDetail: document.getElementById("view-playlist-detail") as HTMLElement,
     equalizerPreset: document.getElementById("equalizer-preset") as HTMLSelectElement,
     equalizerResetBtn: document.getElementById("equalizer-reset-btn") as HTMLButtonElement,
@@ -15,6 +17,12 @@ export const elements = {
     transitionDuration: document.getElementById("transition-duration") as HTMLInputElement,
     transitionDurationValue: document.getElementById("transition-duration-value") as HTMLOutputElement,
     settingsStatus: document.getElementById("settings-status") as HTMLElement,
+    downloadForm: document.getElementById("download-form") as HTMLFormElement,
+    downloadUrl: document.getElementById("download-url") as HTMLInputElement,
+    downloadSubmitBtn: document.getElementById("btn-download-track") as HTMLButtonElement,
+    downloadProgress: document.getElementById("download-progress") as HTMLProgressElement,
+    downloadStatus: document.getElementById("download-status") as HTMLElement,
+    downloadInfo: document.getElementById("info-downloader-btn") as HTMLButtonElement,
 
     addTrackBtn: document.getElementById("add-track-btn") as HTMLButtonElement,
     libraryAddTrackBtn: document.getElementById("library-add-track-btn") as HTMLButtonElement,
@@ -91,6 +99,9 @@ export const elements = {
     remixBackBtn: document.getElementById("remix-back-btn") as HTMLButtonElement,
     remixCreateBtn: document.getElementById("remix-create-btn") as HTMLButtonElement,
     remixSkipBtn: document.getElementById("remix_skip") as HTMLButtonElement,
+
+    infoDownloaderModal: document.getElementById("info-downloader") as HTMLElement,
+    closeInfoDownloaderModalBtn: document.getElementById("close-modal-info-downloader-btn") as HTMLButtonElement,
 
     searchInput: document.querySelector(".search-input") as HTMLInputElement,
     searchDropdown: document.getElementById("search-dropdown") as HTMLElement,

@@ -45,6 +45,24 @@ export interface StoredTrack {
     duration: number;
 }
 
+export interface DownloadedFile {
+    path: string;
+    coverPath: string | null;
+}
+
+export interface DownloadResult {
+    downloadId: string;
+    collectionTitle: string | null;
+    isCollection: boolean;
+    expectedTracks: number;
+    files: DownloadedFile[];
+}
+
+export interface DownloadProgress {
+    stage: "preparing" | "downloading" | "converting" | "finalizing";
+    percentage: number | null;
+}
+
 export interface StoredPlaylist {
     id: string;
     name: string;
@@ -75,7 +93,7 @@ export interface AppState {
     recentItems: RecentEntry[];
     currentTrackId: string | null;
     isPlaying: boolean;
-    activeView: "main" | "media-library" | "playlists" | "settings" | "playlist-detail";
+    activeView: "main" | "media-library" | "playlists" | "settings" | "downloader" | "playlist-detail";
     selectedPlaylistId: string | null;
     searchQuery: string;
     repeatMode: "off" | "all" | "one";

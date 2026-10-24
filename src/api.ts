@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
     CoverKind,
     AudioStatus,
+    DownloadResult,
     PlayerConfig,
     PlaylistCategory,
     RecentEntry,
@@ -22,6 +23,9 @@ export const api = {
     setEqualizer: (gains: number[]) => invoke<AudioStatus>("set_equalizer", { gains }),
     setTransitionDuration: (durationSecs: number) =>
         invoke<AudioStatus>("set_transition_duration", { durationSecs }),
+    downloadTracks: (url: string) =>
+        invoke<DownloadResult>("download_tracks", { url }),
+    cleanupDownload: (downloadId: string) => invoke<void>("cleanup_download", { downloadId }),
     getLibrary: () => invoke<StoredTrack[]>("get_library"),
     getPlaylists: () => invoke<StoredPlaylist[]>("get_playlists"),
     getCovers: () => invoke<StoredCover[]>("get_covers"),

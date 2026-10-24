@@ -8,7 +8,7 @@
   </head>
   <body>
     <div id="app">
-      
+
       <!-- Верхняя шапка приложения -->
       <header class="top-panel">
         <div class="app-brand">
@@ -74,11 +74,21 @@
             </button>
           </div>
 
+          <!-- Импорт -->
+          <button class="btn-ctrl" id="downloader-btn" title="Импорт">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Импорт</span>
+          </button>
+
           <!-- Настройки -->
           <button class="btn-ctrl" id="settings-btn" title="Настройки">
             <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
             </svg>
             <span>Настройки</span>
           </button>
@@ -344,6 +354,46 @@
             </section>
           </div>
           <p class="settings-status" id="settings-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="downloader-section view-section" id="view-downloader">
+          <div class="section-header-row">
+            <h2 class="section-title">Импорт</h2>
+            <button class="action-card view-info-downloader-btn" id="info-downloader-btn" type="button" aria-haspopup="dialog" aria-controls="info-downloader">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>Информация</span>
+            </button>
+          </div>
+
+          <div class="downloader-grid">
+            <section class="downloader-card" aria-labelledby="download-title">
+              <div class="downloader-card-heading">
+                <div>
+                  <h3 id="download-title">Загрузка треков</h3>
+                  <p>Добавляйте треки, альбомы и плейлисты из других платформ</p>
+                </div>
+              </div>
+              <form class="downloader-form" id="download-form">
+                <label class="download-url-field" for="download-url">
+                  <span>Ссылка на трек или плейлист</span>
+                  <input id="download-url" name="url" type="url" inputmode="url" autocomplete="url" placeholder="https://…" required />
+                </label>
+                <button class="download-submit-button" id="btn-download-track" type="submit">
+                  <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span>Загрузить</span>
+                </button>
+                <progress id="download-progress" class="download-progress" max="100" value="0" hidden></progress>
+                <p class="download-status" id="download-status" role="status" aria-live="polite">Загруженные треки появятся в медиатеке.</p>
+              </form>
+          </div>
         </section>
 
         <!-- Просмотр конкретного плейлиста -->
@@ -698,6 +748,56 @@
               </svg>
               <span>Создать ремикс</span>
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модальное окно информации о импорте треков -->
+      <div class="modal-overlay hidden" id="info-downloader" role="dialog" aria-modal="true" aria-labelledby="info-downloader-title">
+        <div class="modal-content info-downloader-modal-content">
+          <div class="modal-header">
+            <div class="info-downloader-heading">
+              <span class="info-downloader-icon" aria-hidden="true">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+              </span>
+              <div>
+                <h3 id="info-downloader-title">Информация об импорте</h3>
+                <p>Что важно знать перед загрузкой</p>
+              </div>
+            </div>
+            <button class="btn-ctrl close-modal-btn" id="close-modal-info-downloader-btn" type="button" aria-label="Закрыть">
+              <svg width="10" height="10" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="modal-body info-downloader-body">
+            <div class="info-section">
+              <h4>Как работает импорт?</h4>
+              <p>Для загрузки треков «под капотом» используется мощная утилита <strong>yt-dlp</strong>. Это наиболее простой, быстрый и надежный способ перенести любимую музыку из YouTube и SoundCloud прямо в вашу локальную медиатеку.</p>
+            </div>
+
+            <div class="info-section">
+              <h4>Условия использования и ограничения</h4>
+              <ul>
+                <li>
+                  <strong>Некоммерческое назначение:</strong> Скачивание и кэширование контента предназначены <em>исключительно для личного использования внутри приложения</em> и носят сугубо некоммерческий характер.
+                </li>
+                <li>
+                  <strong>Вероятность сбоев:</strong> Импорт треков не гарантирует 100% успешную загрузку. Результат зависит от доступности исходных видео, ограничений платформ, авторских прав или региональных блокировок.
+                </li>
+              </ul>
+            </div>
+
+            <div class="info-section">
+              <h4>Полезный совет</h4>
+              <p>Используйте прямые ссылки на конкретные композиции или видео. Если трек не удается импортировать с первой попытки, проверьте правильность ссылки и стабильность интернет-соединения.</p>
+            </div>
           </div>
         </div>
       </div>
