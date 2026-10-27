@@ -27,10 +27,12 @@ export const api = {
         invoke<DownloadResult>("download_tracks", { url }),
     cleanupDownload: (downloadId: string) => invoke<void>("cleanup_download", { downloadId }),
     getLibrary: () => invoke<StoredTrack[]>("get_library"),
+    recordTrackPlay: (trackId: string) => invoke<number>("record_track_play", { trackId }),
     getPlaylists: () => invoke<StoredPlaylist[]>("get_playlists"),
     getCovers: () => invoke<StoredCover[]>("get_covers"),
     getPlayerConfig: () => invoke<PlayerConfig>("get_player_config"),
     getRecentlyPlayed: () => invoke<RecentEntry[]>("get_recently_played"),
+    deleteAllData: () => invoke<void>("delete_all_data"),
     savePlayerConfig: (config: PlayerConfig) => invoke<void>("save_player_config", {
         currentTrackId: config.current_track_id,
         positionSecs: config.position_secs,
@@ -51,6 +53,8 @@ export const api = {
     deleteTrack: (trackId: string) => invoke<StoredTrack[]>("delete_track", { trackId }),
     removeTrackFromPlaylist: (playlistId: string, trackId: string) =>
         invoke<void>("remove_track_from_playlist", { playlistId, trackId }),
+    replaceTrackInPlaylist: (playlistId: string, trackId: string, replacementTrackId: string) =>
+        invoke<void>("replace_track_playlist", { playlistId, trackId, replacementTrackId }),
     addTrackToPlaylist: (playlistId: string, trackId: string) =>
         invoke<void>("add_track_to_playlist", { playlistId, trackId }),
     recordRecentlyPlayed: (kind: RecentItemKind, entityId: string) =>

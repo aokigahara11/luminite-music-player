@@ -8,6 +8,7 @@ export interface Track {
     artist: string;
     path: string;
     duration: number;
+    play_count: number;
     cover?: string;
 }
 
@@ -43,6 +44,7 @@ export interface StoredTrack {
     title: string;
     artist: string | null;
     duration: number;
+    play_count: number;
 }
 
 export interface DownloadedFile {

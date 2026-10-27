@@ -4,7 +4,10 @@ use uuid::Uuid;
 use crate::{
     database::core::Database,
     database::{covers, playlists, recently_played},
-    models::{CoverKind, Playlist, PlaylistCategory, RecentItemKind, FAVORITES_PLAYLIST_ID},
+    models::{
+        CoverKind, Playlist, PlaylistCategory, RecentItemKind, FAVORITES_PLAYLIST_ID,
+        REMIXES_PLAYLIST_ID,
+    },
 };
 
 #[tauri::command]
@@ -38,6 +41,7 @@ pub fn get_playlists(database: State<'_, Database>) -> Result<Vec<Playlist>, Str
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
     playlists::ensure_favorites(&connection)?;
+    playlists::ensure_remixes(&connection)?;
     playlists::all(&connection)
 }
 
@@ -72,8 +76,8 @@ pub fn delete_playlist(
     database: State<'_, Database>,
     playlist_id: String,
 ) -> Result<Vec<Playlist>, String> {
-    if playlist_id == FAVORITES_PLAYLIST_ID {
-        return Err("Плейлист «Избранное» нельзя удалить".to_string());
+    if playlist_id == FAVORITES_PLAYLIST_ID || playlist_id == REMIXES_PLAYLIST_ID {
+        return Err("Системный плейлист нельзя удалить".to_string());
     }
     let connection = database
         .connection
@@ -96,9 +100,10 @@ pub fn edit_metadata_playlist(
     name: String,
     category: PlaylistCategory,
 ) -> Result<Playlist, String> {
-    if id == FAVORITES_PLAYLIST_ID {
-        return Err("Плейлист «Избранное» нельзя переименовать".to_string());
+    if id == FAVORITES_PLAYLIST_ID || id == REMIXES_PLAYLIST_ID {
+        return Err("Системный плейлист нельзя переименовать".to_string());
     }
+
     let name = name.trim();
     if name.is_empty() {
         return Err("Название плейлиста не должно быть пустым.".to_string());
@@ -112,4 +117,18 @@ pub fn edit_metadata_playlist(
         .into_iter()
         .find(|playlist| playlist.id == id)
         .ok_or_else(|| "Плейлист с таким ID не найден.".to_string())
+}
+
+#[tauri::command]
+pub fn replace_track_playlist(
+    database: State<'_, Database>,
+    playlist_id: String,
+    track_id: String,
+    replacement_track_id: String,
+) -> Result<(), String> {
+    let connection = database
+        .connection
+        .lock()
+        .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
+    playlists::replace_track(&connection, &playlist_id, &track_id, &replacement_track_id)
 }

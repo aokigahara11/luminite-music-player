@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const FAVORITES_PLAYLIST_ID: &str = "favorites";
+pub const REMIXES_PLAYLIST_ID: &str = "remixes";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Track {
@@ -9,6 +10,8 @@ pub struct Track {
     pub title: String,
     pub artist: Option<String>,
     pub duration: u32,
+    #[serde(default)]
+    pub play_count: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

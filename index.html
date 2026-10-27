@@ -176,6 +176,21 @@
                 <div class="card-title">Избранное</div>
                 <div class="card-artist" id="home-favorites-count">Любимые треки</div>
               </div>
+
+              <!-- Карточка Ремиксы -->
+               <div class="media-card" id="home-remix-card" role="button" tabindex="0" aria-label="Открыть Ремиксы">
+                <div class="card-cover-wrapper">
+                  <img src="./src/assets/remixes.jpg" alt="Медиатека" class="card-cover" />
+                  <button class="card-play-btn">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6,4 20,12 6,20" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="card-title">Ремиксы</div>
+                <div class="card-artist" id="home-remixes-count">Все ремиксы</div>
+              </div>
+
             </div>
           </div>
         </section>
@@ -352,7 +367,22 @@
                 <output id="transition-duration-value" for="transition-duration">Выкл.</output>
               </label>
             </section>
-          </div>
+
+            <section class="settings-card delete-data" aria-labelledby="delete-data-title">
+              <div class="settings-card-heading">
+                <div>
+                  <h3 id="delete-data-title">Удаление всех данных</h3>
+                  <p>Удалить все данные приложения</p>
+                </div>
+                <button class="delete-data-control-btn" id="open-delete-data-modal-btn" type="button" aria-haspopup="dialog" aria-controls="delete-data-modal">
+                  <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span>Удалить все данные</span>
+                </button>
+              </div>
+            </section>
           <p class="settings-status" id="settings-status" role="status" aria-live="polite"></p>
         </section>
 
@@ -466,10 +496,13 @@
           <div class="sidebar-meta">
             <h2 class="sidebar-title" id="sidebar-title">Трек не выбран</h2>
             <p class="sidebar-artist" id="sidebar-artist">Выберите трек для воспроизведения</p>
+            <p class="sidebar-play-count" id="sidebar-play-count">Прослушиваний: 0</p>
           </div>
 
           <div class="sidebar-player-actions">
-            <button class="sidebar-edit-button" id="edit-track-btn" type="button" disabled>Редактировать</button>
+            <button class="sidebar-edit-button sidebar-action-button" id="edit-track-btn" type="button" disabled>Редактировать</button>
+            <button class="sidebar-remix-button sidebar-action-button" id="create-remix-btn" type="button" disabled>Ремикс</button>
+            <button class="sidebar-add-to-playlist sidebar-action-button" id="add-to-playlist-btn" type="button" disabled>Добавить в плейлист</button>
           </div>
 
           <form class="sidebar-edit-form" id="track-edit-form" hidden>
@@ -579,7 +612,7 @@
 
       <!-- Модальное окно добавления в плейлист -->
       <div class="modal-overlay hidden" id="add-to-playlist-modal">
-        <div class="modal-content">
+        <div class="modal-content playlist-picker-modal">
           <div class="modal-header">
             <h3>Добавить в плейлист</h3>
             <button class="btn-ctrl close-modal-btn" id="close-add-playlist-modal-btn" type="button" aria-label="Закрыть">
@@ -589,6 +622,13 @@
             </button>
           </div>
           <div class="modal-body">
+            <div class="playlist-picker-search">
+              <svg class="search-icon icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="search" id="modal-playlist-search" class="search-input" placeholder="Найти плейлист..." aria-label="Поиск плейлистов" />
+            </div>
             <div class="modal-playlists-empty hidden" id="modal-playlists-empty">
               <p>У вас пока нет плейлистов</p>
               <button class="action-card" id="modal-create-playlist-btn">
@@ -599,6 +639,7 @@
                 <span>Создать плейлист</span>
               </button>
             </div>
+            <p class="playlist-picker-no-results hidden" id="modal-playlists-no-results">Плейлисты не найдены</p>
             <div class="modal-playlists-list" id="modal-playlists-list"></div>
           </div>
         </div>
@@ -798,6 +839,32 @@
               <h4>Полезный совет</h4>
               <p>Используйте прямые ссылки на конкретные композиции или видео. Если трек не удается импортировать с первой попытки, проверьте правильность ссылки и стабильность интернет-соединения.</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модальное окно для подвтерждения удаления всех данных -->
+      <div class="modal-overlay hidden" id="delete-data-modal" role="dialog" aria-modal="true" aria-labelledby="delete-data-modal-title">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="delete-data-modal-title">Удалить все данные?</h3>
+            <button class="btn-ctrl close-modal-btn" id="close-delete-data-modal-btn" type="button" aria-label="Закрыть">
+              <svg width="10" height="10" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>Будут удалены все треки, пользовательские плейлисты, обложки, история прослушивания и настройки. Системные разделы останутся пустыми. Это действие нельзя отменить.</p>
+          </div>
+          <div class="modal-footer">
+            <button class="action-card" id="confirm-delete-data-btn" type="button" style="justify-content: center; width: 100%;">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Удалить все данные</span>
+            </button>
           </div>
         </div>
       </div>

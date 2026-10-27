@@ -10,7 +10,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{commands::tracks::import_generated_track, database::core::Database, models::Track};
+use crate::{
+    commands::tracks::import_generated_track,
+    database::{core::Database, playlists, tracks},
+    models::{Track, REMIXES_PLAYLIST_ID},
+};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -991,6 +995,41 @@ pub fn create_and_render_remix(
 
     match import_generated_track(&database, &remix_path, &track_artist) {
         Ok(track) => {
+            let playlist_result = database
+                .connection
+                .lock()
+                .map_err(|_| "Соединение с базой данных недоступно".to_string())
+                .and_then(|connection| {
+                    playlists::ensure_remixes(&connection)?;
+                    playlists::add_track(&connection, REMIXES_PLAYLIST_ID, &track.id)
+                });
+            if let Err(error) = playlist_result {
+                let mut cleanup_errors = Vec::new();
+                match database.connection.lock() {
+                    Ok(connection) => {
+                        if let Err(cleanup_error) = tracks::delete(&connection, &track.id) {
+                            cleanup_errors.push(format!(
+                                "не удалось удалить запись трека: {cleanup_error}"
+                            ));
+                        }
+                    }
+                    Err(_) => cleanup_errors
+                        .push("соединение с базой данных недоступно для очистки".to_string()),
+                }
+                if let Err(cleanup_error) = std::fs::remove_file(&track.path) {
+                    if std::path::Path::new(&track.path).exists() {
+                        cleanup_errors.push(format!("не удалось удалить файл трека: {cleanup_error}"));
+                    }
+                }
+                let cleanup_details = if cleanup_errors.is_empty() {
+                    String::new()
+                } else {
+                    format!(" Ошибки очистки: {}", cleanup_errors.join("; "))
+                };
+                return Err(format!(
+                    "Не удалось сохранить ремикс в плейлисте «Ремиксы»: {error}.{cleanup_details}"
+                ));
+            }
             if let Err(error) = std::fs::remove_dir(&output_dir) {
                 eprintln!("Не удалось удалить временную папку ремикса: {error}");
             }

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     database::core::Database,
     database::{covers, playlists, tracks},
-    models::{Cover, CoverKind, FAVORITES_PLAYLIST_ID},
+    models::{Cover, CoverKind, FAVORITES_PLAYLIST_ID, REMIXES_PLAYLIST_ID},
 };
 
 #[tauri::command]
@@ -25,8 +25,10 @@ pub fn set_cover(
     entity_id: String,
     file_path: String,
 ) -> Result<Cover, String> {
-    if kind == CoverKind::Playlist && entity_id == FAVORITES_PLAYLIST_ID {
-        return Err("Обложку плейлиста «Избранное» нельзя изменить".to_string());
+    if kind == CoverKind::Playlist
+        && (entity_id == FAVORITES_PLAYLIST_ID || entity_id == REMIXES_PLAYLIST_ID)
+    {
+        return Err("Обложку системного плейлиста нельзя изменить".to_string());
     }
     let source_path = PathBuf::from(file_path);
     if !source_path.is_file() {

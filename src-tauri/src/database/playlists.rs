@@ -1,4 +1,4 @@
-use crate::models::{Playlist, PlaylistCategory, FAVORITES_PLAYLIST_ID};
+use crate::models::{Playlist, PlaylistCategory, FAVORITES_PLAYLIST_ID, REMIXES_PLAYLIST_ID};
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub fn initialize(connection: &Connection) -> Result<(), String> {
@@ -88,6 +88,16 @@ pub fn ensure_favorites(connection: &Connection) -> Result<(), String> {
         .map_err(|error| format!("Не удалось создать плейлист «Избранное»: {error}"))
 }
 
+pub fn ensure_remixes(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO playlists (id, name, category, position) VALUES (?1, 'Ремиксы', 'Плейлист', COALESCE((SELECT MAX(position) + 1 FROM playlists), 0))",
+            [REMIXES_PLAYLIST_ID],
+        )
+        .map(|_| ())
+        .map_err(|error| format!("Не удалось создать плейлист «Ремиксы»: {error}"))
+}
+
 pub fn add_track(connection: &Connection, playlist_id: &str, track_id: &str) -> Result<(), String> {
     let exists: Option<i64> = connection
         .query_row(
@@ -130,6 +140,24 @@ pub fn remove_track(
         .map_err(|error| format!("Не удалось удалить трек из плейлиста: {error}"))
 }
 
+pub fn replace_track(
+    connection: &Connection,
+    playlist_id: &str,
+    track_id: &str,
+    replacement_track_id: &str,
+) -> Result<(), String> {
+    let changed = connection
+        .execute(
+            "UPDATE playlist_tracks SET track_id = ?1 WHERE playlist_id = ?2 AND track_id = ?3",
+            params![replacement_track_id, playlist_id, track_id],
+        )
+        .map_err(|error| format!("Не удалось заменить трек в плейлисте: {error}"))?;
+    if changed == 0 {
+        return Err("Трек не найден в плейлисте".to_string());
+    }
+    Ok(())
+}
+
 pub fn delete(connection: &Connection, playlist_id: &str) -> Result<(), String> {
     let changed = connection
         .execute("DELETE FROM playlists WHERE id = ?1", [playlist_id])
@@ -163,5 +191,55 @@ fn parse_category(category: &str) -> PlaylistCategory {
         "EP" => PlaylistCategory::Ep,
         "Альбом" => PlaylistCategory::Album,
         _ => PlaylistCategory::Playlist,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replace_track_keeps_its_position_and_remixes_playlist_is_persistent() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE tracks (id TEXT PRIMARY KEY NOT NULL);
+                 INSERT INTO tracks (id) VALUES ('first'), ('second'), ('third'), ('replacement');",
+            )
+            .unwrap();
+        initialize(&connection).unwrap();
+
+        let playlist = Playlist {
+            id: "playlist".to_string(),
+            name: "Playlist".to_string(),
+            category: PlaylistCategory::Playlist,
+            id_tracks: Vec::new(),
+        };
+        create(&connection, &playlist).unwrap();
+        add_track(&connection, &playlist.id, "first").unwrap();
+        add_track(&connection, &playlist.id, "second").unwrap();
+        add_track(&connection, &playlist.id, "third").unwrap();
+        ensure_remixes(&connection).unwrap();
+        add_track(&connection, REMIXES_PLAYLIST_ID, "replacement").unwrap();
+
+        replace_track(&connection, &playlist.id, "second", "replacement").unwrap();
+        let all_playlists = all(&connection).unwrap();
+        assert_eq!(
+            all_playlists
+                .iter()
+                .find(|item| item.id == playlist.id)
+                .unwrap()
+                .id_tracks,
+            ["first", "replacement", "third"]
+        );
+        assert_eq!(
+            all_playlists
+                .iter()
+                .find(|item| item.id == REMIXES_PLAYLIST_ID)
+                .unwrap()
+                .id_tracks,
+            ["replacement"]
+        );
+        assert!(replace_track(&connection, &playlist.id, "first", "third").is_err());
     }
 }

@@ -17,9 +17,11 @@ import type {
 } from "./types";
 
 const FAVORITES_PLAYLIST_ID = "favorites";
+const REMIXES_PLAYLIST_ID = "remixes";
 const AUDIO_SETTINGS_STORAGE_KEY = "luminite-audio-settings";
 const EQUALIZER_FREQUENCIES = [60, 150, 400, 1_000, 2_400, 15_000];
 const LEGACY_EQUALIZER_FREQUENCIES = [60, 250, 1_000, 4_000, 12_000];
+const PLAY_COUNT_THRESHOLD_SECS = 60;
 const EQUALIZER_PRESETS: Record<string, number[]> = {
     flat: [0, 0, 0, 0, 0, 0],
     bassBoost: [7, 5, 2, 0, 0, 0],
@@ -49,6 +51,11 @@ interface AudioSettings {
     transitionDuration: number;
 }
 
+function updateHomeRemixesCount() {
+    const remixes = state.playlists.find((playlist) => playlist.id === REMIXES_PLAYLIST_ID);
+    if (remixes) elements.homeRemixesCount.textContent = `${remixes.trackIds.length} треков`;
+}
+
 let audioStatus: AudioStatus = {
     positionSecs: 0,
     durationSecs: 0,
@@ -64,6 +71,14 @@ let toastTimer: number | undefined;
 let toastHideTimer: number | undefined;
 let transitionCheckedForTrackId: string | null = null;
 let transitionPendingForTrackId: string | null = null;
+let listenProgress: {
+    trackId: string;
+    positionSecs: number;
+    observedAt: number;
+    isPlaying: boolean;
+    listenedSecs: number;
+    counted: boolean;
+} | null = null;
 let audioSettings: AudioSettings = {
     equalizer: [...EQUALIZER_PRESETS.flat],
     transitionDuration: 0,
@@ -185,6 +200,7 @@ async function loadSavedData() {
     state.playbackQueueTrackIds = state.tracks.map((track) => track.id);
     state.recentItems = recentItems;
     updateHomeFavoritesCount();
+    updateHomeRemixesCount();
     updateFavoriteButton();
 
     covers.forEach((cover) => {
@@ -444,6 +460,13 @@ function renderRecentlyPlayed() {
     });
 }
 
+function truncate(text: string, maxLength: number = 40): string {
+    if (text.length > maxLength) {
+        return text.slice(0, maxLength) + "...";
+    }
+    return text;
+}
+
 function renderTrackList(container: HTMLElement, tracks: Track[], context: "library" | "playlist") {
     const header = `
     <div class="track-list-header">
@@ -467,16 +490,19 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
             const isFavorite = state.playlists
                 .find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID)
                 ?.trackIds.includes(track.id) ?? false;
+            
             const menuActions = `
                 <button class="track-menu-option" type="button" role="menuitem" data-action="toggle-favorite" data-id="${track.id}">${isFavorite ? "Убрать из избранного" : "Добавить в избранное"}</button>
                 ${context === "playlist"
                     ? isFavoritesPlaylist
                         ? `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>`
-                        : `<button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="remove-from-playlist" data-id="${track.id}">Удалить из плейлиста</button>`
+                        : `<button class="track-menu-option" type="button" role="menuitem" data-action="replace-track-in-playlist" data-id="${track.id}">Заменить трек</button>
+                           <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="remove-from-playlist" data-id="${track.id}">Удалить из плейлиста</button>`
                     : `<button class="track-menu-option" type="button" role="menuitem" data-action="add-to-playlist" data-id="${track.id}">Добавить в плейлист</button>
                        <button class="track-menu-option" type="button" role="menuitem" data-action="create-remix" data-id="${track.id}">Создать ремикс трека</button>
                        <button class="track-menu-option track-menu-option-danger" type="button" role="menuitem" data-action="delete-track" data-id="${track.id}">Удалить из медиатеки</button>`}
             `;
+            
             const actionMenu = `
                 <div class="track-actions-menu">
                     <button class="track-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Действия с треком ${track.title}" title="Действия с треком">
@@ -492,8 +518,8 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
             return `
       <div class="track-row ${isCurrent ? "active" : ""} ${isPlaying ? "playing" : ""}" data-id="${track.id}">
         <span class="col-num">${idx + 1}</span>
-        <span class="col-title">${track.title}</span>
-        <span class="col-artist">${track.artist}</span>
+        <span class="col-title">${truncate(track.title)}</span>
+        <span class="col-artist">${truncate(track.artist)}</span>
         <span class="col-duration">${formatTime(track.duration)}</span>
         <span class="col-actions">${actionMenu}</span>
       </div>`;
@@ -557,6 +583,8 @@ function renderTrackList(container: HTMLElement, tracks: Track[], context: "libr
                     await deleteTrackFromLibrary(trackId);
                 } else if (action === "remove-from-playlist") {
                     await removeTrackFromPlaylist(trackId);
+                } else if (action === "replace-track-in-playlist") {
+                    await replaceTrackFromFile(trackId);
                 }
             } catch (error) {
                 console.error("Не удалось выполнить действие с треком:", error);
@@ -870,7 +898,10 @@ function updateTrackMetadata(track: Track) {
     elements.playerArtist.textContent = track.artist;
     elements.sidebarTitle.textContent = track.title;
     elements.sidebarArtist.textContent = track.artist;
+    elements.sidebarPlayCount.textContent = `Прослушиваний: ${track.play_count}`;
     elements.editTrackBtn.disabled = false;
+    elements.sidebarRemixBtn.disabled = false;
+    elements.sidebarAddToPlaylistBtn.disabled = false;
     elements.changeTrackCoverBtn.disabled = false;
     updateFavoriteButton();
     requestAnimationFrame(updateTrackTextMarquee);
@@ -879,6 +910,64 @@ function updateTrackMetadata(track: Track) {
         image.src = cover;
         image.alt = track.title;
     });
+}
+
+function updateTrackListenProgress(track: Track | undefined, status: AudioStatus) {
+    if (!track || !Number.isFinite(status.positionSecs)) {
+        listenProgress = null;
+        return;
+    }
+
+    const now = performance.now();
+    if (!listenProgress || listenProgress.trackId !== track.id) {
+        listenProgress = {
+            trackId: track.id,
+            positionSecs: status.positionSecs,
+            observedAt: now,
+            isPlaying: status.isPlaying,
+            listenedSecs: 0,
+            counted: false,
+        };
+        return;
+    }
+
+    const elapsedSecs = Math.max(0, (now - listenProgress.observedAt) / 1000);
+    const positionDelta = status.positionSecs - listenProgress.positionSecs;
+    const advancedDuringPlayback = listenProgress.isPlaying
+        && (status.isPlaying || status.ended)
+        && positionDelta > 0
+        && positionDelta <= elapsedSecs * 2 + 0.15;
+    if (advancedDuringPlayback) {
+        listenProgress.listenedSecs += positionDelta;
+    }
+
+    const completedShortTrack = status.ended
+        && status.durationSecs > 0
+        && status.durationSecs < PLAY_COUNT_THRESHOLD_SECS
+        && listenProgress.listenedSecs >= Math.max(status.durationSecs - 0.5, status.durationSecs * 0.9);
+    if (!listenProgress.counted && ( listenProgress.listenedSecs >= PLAY_COUNT_THRESHOLD_SECS || completedShortTrack)) {
+        listenProgress.counted = true;
+        void api.recordTrackPlay(track.id).then((playCount) => {
+            const currentTrack = state.tracks.find((item) => item.id === track.id);
+            if (!currentTrack) return;
+            currentTrack.play_count = playCount;
+            if (state.currentTrackId === track.id) {
+                elements.sidebarPlayCount.textContent = `Прослушиваний: ${playCount}`;
+            }
+        }).catch((error) => {
+            console.error("Не удалось записать прослушивание трека:", error);
+            showToast(`Не удалось записать прослушивание: ${String(error)}`, true);
+        });
+    }
+
+    listenProgress.positionSecs = status.positionSecs;
+    listenProgress.observedAt = now;
+    listenProgress.isPlaying = status.isPlaying;
+    if (status.ended) {
+        listenProgress.listenedSecs = 0;
+        listenProgress.counted = false;
+        listenProgress.isPlaying = false;
+    }
 }
 
 function openTrackEditor() {
@@ -890,13 +979,13 @@ function openTrackEditor() {
     elements.trackEditStatus.textContent = "";
     elements.trackEditStatus.hidden = true;
     elements.trackEditForm.hidden = false;
-    elements.editTrackBtn.hidden = true;
+    elements.sidebarPlayerActions.hidden = true;
     elements.trackTitleInput.focus();
 }
 
 function closeTrackEditor() {
     elements.trackEditForm.hidden = true;
-    elements.editTrackBtn.hidden = false;
+    elements.sidebarPlayerActions.hidden = false;
 }
 
 async function reloadTrackAudio(track: Track, position: number, shouldPlay: boolean) {
@@ -1212,6 +1301,8 @@ function renderPlaylists() {
                             ? `<img src="${pl.cover}" alt="Обложка: ${pl.title}" />`
                             : pl.id === FAVORITES_PLAYLIST_ID
                                 ? `<img src="./src/assets/favorites.jpg" alt="Обложка: ${pl.title}" />`
+                                : pl.id === REMIXES_PLAYLIST_ID
+                                    ? `<img src="./src/assets/remixes.jpg" alt="Обложка: ${pl.title}" />`
                                 : "🎵"}
                     </div>
         </div>
@@ -1223,7 +1314,17 @@ function renderPlaylists() {
             )
             .join("");
 
-        elements.playlistsGrid.querySelectorAll(".media-card").forEach((card) => {
+        elements.playlistsGrid.querySelectorAll<HTMLElement>(".media-card").forEach((card) => {
+            card.setAttribute("role", "button");
+            card.setAttribute("tabindex", "0");
+            card.addEventListener("keydown", (event: KeyboardEvent) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                const id = card.getAttribute("data-playlist-id");
+                if (!id) return;
+                state.selectedPlaylistId = id;
+                switchView("playlist-detail");
+            });
             card.addEventListener("click", () => {
                 const id = card.getAttribute("data-playlist-id");
                 if (id) {
@@ -1234,6 +1335,7 @@ function renderPlaylists() {
         });
     }
     updateHomeFavoritesCount();
+    updateHomeRemixesCount();
 }
 
 function renderPlaylistDetail() {
@@ -1242,10 +1344,10 @@ function renderPlaylistDetail() {
 
     elements.playlistDetailTitle.textContent = playlist.title;
     elements.playlistDetailCount.textContent = `${playlist.category} · ${playlist.trackIds.length} треков`;
-    const isFavorites = playlist.id === FAVORITES_PLAYLIST_ID;
-    elements.editPlaylistBtn.hidden = isFavorites;
-    elements.deletePlaylistBtn.hidden = isFavorites;
-    elements.changePlaylistCoverBtn.hidden = isFavorites;
+    const isSystemPlaylist = playlist.id === FAVORITES_PLAYLIST_ID || playlist.id === REMIXES_PLAYLIST_ID;
+    elements.editPlaylistBtn.hidden = isSystemPlaylist;
+    elements.deletePlaylistBtn.hidden = isSystemPlaylist;
+    elements.changePlaylistCoverBtn.hidden = isSystemPlaylist;
 
     const playlistTracks = playlist.trackIds.flatMap((trackId) => {
         const track = state.tracks.find((item) => item.id === trackId);
@@ -1309,7 +1411,19 @@ async function createRemix(effects: string[]) {
         const remix = mapStoredTrack(storedRemix);
         state.tracks.push(remix);
         if (!state.playbackQueuePlaylistId) state.playbackQueueTrackIds.push(remix.id);
+        let remixPlaylist = state.playlists.find((playlist) => playlist.id === REMIXES_PLAYLIST_ID);
+        if (!remixPlaylist) {
+            state.playlists = (await api.getPlaylists()).map(mapStoredPlaylist);
+            remixPlaylist = state.playlists.find((playlist) => playlist.id === REMIXES_PLAYLIST_ID);
+        }
+        if (!remixPlaylist) throw new Error("Системный плейлист «Ремиксы» не найден");
+        remixPlaylist.trackIds.push(remix.id);
         renderMediaLibrary();
+        renderPlaylists();
+        updateHomeRemixesCount();
+        if (state.activeView === "playlist-detail" && state.selectedPlaylistId === REMIXES_PLAYLIST_ID) {
+            renderPlaylistDetail();
+        }
         closeRemixModals();
         showToast(`Ремикс «${remix.title}» добавлен в медиатеку`);
     } catch (error) {
@@ -1324,46 +1438,208 @@ async function createRemix(effects: string[]) {
 }
 
 let trackToAddToPlaylist: string | null = null;
-function openAddToPlaylistModal(trackId: string) {
-    trackToAddToPlaylist = trackId;
-    elements.modalPlaylistsList.innerHTML = state.playlists
-        .map(
-            (pl) => `
-    <button class="action-card modal-pl-item" data-id="${pl.id}" style="width: 100%; margin-bottom: 8px;">
-      <span>${pl.title}</span>
-    </button>
-  `,
-        )
+function renderAddToPlaylistOptions() {
+    const query = elements.modalPlaylistSearch.value.trim().toLocaleLowerCase();
+    const matchingPlaylists = state.playlists.filter((playlist) =>
+        playlist.title.toLocaleLowerCase().includes(query)
+        || playlist.category.toLocaleLowerCase().includes(query),
+    );
+
+    elements.modalPlaylistsEmpty.classList.toggle("hidden", state.playlists.length > 0);
+    elements.modalPlaylistsNoResults.classList.toggle(
+        "hidden",
+        state.playlists.length === 0 || matchingPlaylists.length > 0,
+    );
+    elements.modalPlaylistsList.classList.toggle("hidden", matchingPlaylists.length === 0);
+    elements.modalPlaylistsList.innerHTML = matchingPlaylists
+        .map((playlist) => {
+            const cover = playlist.cover
+                || (playlist.id === FAVORITES_PLAYLIST_ID ? "./src/assets/favorites.jpg" : "")
+                || (playlist.id === REMIXES_PLAYLIST_ID ? "./src/assets/remixes.jpg" : "");
+            return `
+                <button class="modal-playlist-item modal-pl-item" type="button" data-id="${playlist.id}">
+                    <span class="modal-playlist-cover">
+                        ${cover
+                            ? `<img src="${cover}" alt="" />`
+                            : `<span class="modal-playlist-cover-placeholder" aria-hidden="true">♫</span>`}
+                    </span>
+                    <span class="modal-playlist-copy">
+                        <span class="modal-playlist-title">${playlist.title}</span>
+                        <span class="modal-playlist-meta">${playlist.category} · ${playlist.trackIds.length} треков</span>
+                    </span>
+                    <svg class="modal-playlist-arrow icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                </button>
+            `;
+        })
         .join("");
 
-    if (state.playlists.length === 0) {
-        elements.modalPlaylistsList.classList.add("hidden");
-        elements.modalPlaylistsEmpty.classList.remove("hidden");
-        openModal(elements.addToPlaylistModal);
+    elements.modalPlaylistsList.querySelectorAll<HTMLButtonElement>(".modal-pl-item").forEach((button) => {
+        button.addEventListener("click", () => {
+            void addTrackToPlaylistFromPicker(button.dataset.id);
+        });
+    });
+}
+
+async function addTrackToPlaylistFromPicker(playlistId: string | undefined) {
+    if (!playlistId || !trackToAddToPlaylist) return;
+
+    try {
+        const playlist = state.playlists.find((item) => item.id === playlistId);
+        if (!playlist) throw new Error("Плейлист не найден");
+        if (playlist.trackIds.includes(trackToAddToPlaylist)) {
+            showToast("Этот трек уже есть в плейлисте");
+        } else {
+            await api.addTrackToPlaylist(playlistId, trackToAddToPlaylist);
+            playlist.trackIds.push(trackToAddToPlaylist);
+            renderPlaylists();
+            renderRecentlyPlayed();
+            showToast("Трек добавлен в плейлист");
+        }
+        closeModal(elements.addToPlaylistModal);
+        trackToAddToPlaylist = null;
+    } catch (error) {
+        console.error("Не удалось добавить трек в плейлист:", error);
+        showToast(`Не удалось добавить трек в плейлист: ${String(error)}`, true);
+    }
+}
+
+function openAddToPlaylistModal(trackId: string) {
+    trackToAddToPlaylist = trackId;
+    elements.modalPlaylistSearch.value = "";
+    renderAddToPlaylistOptions();
+    openModal(elements.addToPlaylistModal);
+}
+
+async function replaceTrackFromFile(trackId: string) {
+    const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
+    if (!playlist || playlist.id === FAVORITES_PLAYLIST_ID) return;
+    if (!playlist.trackIds.includes(trackId)) {
+        showToast("Трек больше не найден в плейлисте", true);
         return;
     }
 
-    elements.modalPlaylistsEmpty.classList.add("hidden");
-    elements.modalPlaylistsList.classList.remove("hidden");
-    elements.modalPlaylistsList.querySelectorAll(".modal-pl-item").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-            const plId = btn.getAttribute("data-id");
-            if (plId && trackToAddToPlaylist) {
-                const pl = state.playlists.find((p) => p.id === plId);
-                if (pl && !pl.trackIds.includes(trackToAddToPlaylist)) {
-                    await api.addTrackToPlaylist(plId, trackToAddToPlaylist);
-                    pl.trackIds.push(trackToAddToPlaylist);
-                    renderPlaylists();
-                    renderRecentlyPlayed();
-                    showToast("Трек добавлен в плейлист");
-                }
-                closeModal(elements.addToPlaylistModal);
-                trackToAddToPlaylist = null;
-            }
-        });
+    const filePath = await open({
+        multiple: false,
+        filters: [{ name: "Аудио", extensions: ["mp3", "wav", "flac", "ogg", "m4a"] }],
     });
+    if (typeof filePath !== "string") return;
 
-    openModal(elements.addToPlaylistModal);
+    let importedTrack: Track | null = null;
+    let replaced = false;
+    try {
+        importedTrack = mapStoredTrack(await api.importTrack(filePath));
+        await api.replaceTrackInPlaylist(playlist.id, trackId, importedTrack.id);
+        replaced = true;
+        const trackIndex = playlist.trackIds.indexOf(trackId);
+        playlist.trackIds[trackIndex] = importedTrack.id;
+        state.tracks.push(importedTrack);
+        let playbackError: unknown;
+        if (state.currentTrackId === trackId) {
+            state.currentTrackId = importedTrack.id;
+            updateTrackMetadata(importedTrack);
+            try {
+                await reloadTrackAudio(importedTrack, audioStatus.positionSecs, state.isPlaying);
+            } catch (error) {
+                playbackError = error;
+                console.error("Не удалось запустить заменённый трек:", error);
+            }
+        }
+        renderMediaLibrary();
+        renderPlaylistDetail();
+        renderPlaylists();
+        renderRecentlyPlayed();
+        showToast(
+            playbackError
+                ? `Трек заменён, но не удалось начать воспроизведение: ${String(playbackError)}`
+                : "Трек заменён в плейлисте",
+            Boolean(playbackError),
+        );
+    } catch (error) {
+        if (importedTrack && !replaced) {
+            try {
+                await api.deleteTrack(importedTrack.id);
+            } catch (cleanupError) {
+                console.error("Не удалось удалить импортированный файл после ошибки замены:", cleanupError);
+                showToast(`Трек не заменён; не удалось удалить новый файл: ${String(cleanupError)}`, true);
+                return;
+            }
+        }
+        throw error;
+    }
+}
+
+async function deleteAllAppData() {
+    elements.confirmDeleteDataBtn.disabled = true;
+    try {
+        await Promise.all([playerSaveQueue, recentSaveQueue]);
+        audioStatus = await api.stopAudio();
+        state.isPlaying = false;
+        state.currentTrackId = null;
+        await api.deleteAllData();
+        state.tracks = [];
+        state.playlists = [];
+        state.recentItems = [];
+        state.currentTrackId = null;
+        state.isPlaying = false;
+        listenProgress = null;
+        state.selectedPlaylistId = null;
+        state.playbackQueueTrackIds = [];
+        state.playbackQueuePlaylistId = null;
+        audioSettings = {
+            equalizer: [...EQUALIZER_PRESETS.flat],
+            transitionDuration: 0,
+        };
+        let localSettingsError: unknown;
+        try {
+            localStorage.removeItem(AUDIO_SETTINGS_STORAGE_KEY);
+        } catch (error) {
+            localSettingsError = error;
+            console.error("Не удалось удалить локальные настройки звука:", error);
+        }
+        await Promise.all([
+            api.setAudioVolume(0.7),
+            api.setEqualizer(audioSettings.equalizer),
+            api.setTransitionDuration(0),
+        ]);
+        renderAudioSettings();
+        closeModal(elements.deleteDataModal);
+        elements.playerTitle.textContent = "Не выбрано";
+        elements.playerArtist.textContent = "Исполнитель";
+        elements.sidebarTitle.textContent = "Не выбрано";
+        elements.sidebarArtist.textContent = "Исполнитель";
+        elements.sidebarPlayCount.textContent = "Прослушиваний: 0";
+        elements.editTrackBtn.disabled = true;
+        elements.sidebarRemixBtn.disabled = true;
+        elements.sidebarAddToPlaylistBtn.disabled = true;
+        elements.changeTrackCoverBtn.disabled = true;
+        elements.playerCover.src = "./src/assets/media_library.jpg";
+        elements.sidebarCover.src = "./src/assets/media_library.jpg";
+        elements.sidebarCoverWrapper.classList.remove("has-cover");
+        updateFavoriteButton();
+        updatePlayButtonIcon();
+        updateProgressDisplay(0);
+        switchView("main");
+        await loadSavedData();
+        if (localSettingsError) {
+            showToast(`Данные удалены, но не удалось очистить локальные настройки: ${String(localSettingsError)}`, true);
+        } else {
+            showToast("Все данные удалены");
+        }
+    } catch (error) {
+        console.error("Не удалось удалить все данные:", error);
+        try {
+            state.currentTrackId = null;
+            state.isPlaying = false;
+            await loadSavedData();
+        } catch (reloadError) {
+            console.error("Не удалось обновить данные после попытки удаления:", reloadError);
+        }
+        showToast(`Не удалось удалить все данные: ${String(error)}`, true);
+    } finally {
+        elements.confirmDeleteDataBtn.disabled = false;
+    }
 }
 
 async function initEvents() {
@@ -1373,6 +1649,7 @@ async function initEvents() {
             audioStatus = payload;
             state.isPlaying = payload.isPlaying;
             const audioTrack = state.tracks.find((track) => track.path === payload.trackPath);
+            updateTrackListenProgress(audioTrack, payload);
             if (audioTrack && payload.durationSecs > 0) audioTrack.duration = payload.durationSecs;
             updateProgressDisplay();
 
@@ -1428,8 +1705,14 @@ async function initEvents() {
         state.selectedPlaylistId = FAVORITES_PLAYLIST_ID;
         switchView("playlist-detail");
     };
+    const openRemixes = () => {
+        state.selectedPlaylistId = REMIXES_PLAYLIST_ID;
+        switchView("playlist-detail");
+    };
     elements.homeFavoritesCard?.addEventListener("click", openFavorites);
     elements.homeFavoritesCard?.addEventListener("keydown", (event) => openCardFromKeyboard(event, openFavorites));
+    elements.homeRemixesCard?.addEventListener("click", openRemixes);
+    elements.homeRemixesCard?.addEventListener("keydown", (event) => openCardFromKeyboard(event, openRemixes));
 
     // Добавление треков
     elements.addTrackBtn?.addEventListener("click", addTrackHandler);
@@ -1471,7 +1754,7 @@ async function initEvents() {
         closeModal(elements.addToPlaylistModal);
         trackToAddToPlaylist = null;
     });
-
+    elements.modalPlaylistSearch?.addEventListener("input", renderAddToPlaylistOptions);
     elements.closeRemixSpeedBtn.addEventListener("click", closeRemixModals);
     elements.closeRemixSettingsBtn.addEventListener("click", closeRemixModals);
     elements.remixBackBtn.addEventListener("click", () => {
@@ -1559,6 +1842,12 @@ async function initEvents() {
         }
     });
     elements.editTrackBtn?.addEventListener("click", openTrackEditor);
+    elements.sidebarRemixBtn?.addEventListener("click", () => {
+        if (state.currentTrackId) openRemixSpeedModal(state.currentTrackId);
+    });
+    elements.sidebarAddToPlaylistBtn?.addEventListener("click", () => {
+        if (state.currentTrackId) openAddToPlaylistModal(state.currentTrackId);
+    });
     elements.favoriteBtn?.addEventListener("click", async () => {
         if (!state.currentTrackId) return;
         try {
@@ -1641,6 +1930,18 @@ async function initEvents() {
         saveAudioSettings();
         applyTransitionDuration();
     });
+    elements.openDeleteDataModalBtn?.addEventListener("click", () => {
+        openModal(elements.deleteDataModal);
+        elements.closeDeleteDataModalBtn.focus();
+    });
+    elements.closeDeleteDataModalBtn?.addEventListener("click", () => closeModal(elements.deleteDataModal));
+    elements.deleteDataModal?.addEventListener("click", (event) => {
+        if (event.target === elements.deleteDataModal) closeModal(elements.deleteDataModal);
+    });
+    elements.deleteDataModal?.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape") closeModal(elements.deleteDataModal);
+    });
+    elements.confirmDeleteDataBtn?.addEventListener("click", () => void deleteAllAppData());
 
     // Поиск
     elements.searchInput?.addEventListener("input", (e) => {
