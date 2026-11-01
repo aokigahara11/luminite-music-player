@@ -2,6 +2,7 @@ export const elements = {
     sidebarTitle: document.getElementById("sidebar-title") as HTMLElement,
     sidebarArtist: document.getElementById("sidebar-artist") as HTMLElement,
     sidebarPlayCount: document.getElementById("sidebar-play-count") as HTMLElement,
+    mobileTrackDetailsBtn: document.getElementById("mobile-track-details-btn") as HTMLButtonElement,
     sidebarCover: document.getElementById("sidebar-cover") as HTMLImageElement,
     sidebarCoverWrapper: document.querySelector(".sidebar-cover-wrapper") as HTMLElement,
     changeTrackCoverBtn: document.getElementById("change-track-cover-btn") as HTMLButtonElement,

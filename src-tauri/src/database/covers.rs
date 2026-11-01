@@ -15,6 +15,25 @@ pub fn initialize(connection: &Connection) -> Result<(), String> {
         .map_err(|error| format!("Не удалось создать таблицу covers: {error}"))
 }
 
+pub fn backfill_track_covers(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute(
+            "UPDATE tracks
+             SET cover = (
+                 SELECT path_file FROM covers
+                 WHERE kind = 'track' AND entity_id = tracks.id
+             )
+             WHERE cover IS NULL
+               AND EXISTS (
+                   SELECT 1 FROM covers
+                   WHERE kind = 'track' AND entity_id = tracks.id
+               )",
+            [],
+        )
+        .map(|_| ())
+        .map_err(|error| format!("Не удалось перенести обложки треков: {error}"))
+}
+
 pub fn all(connection: &Connection) -> Result<Vec<Cover>, String> {
     let mut statement = connection
         .prepare("SELECT id, kind, entity_id, path_file FROM covers ORDER BY rowid")
@@ -37,6 +56,28 @@ pub fn all(connection: &Connection) -> Result<Vec<Cover>, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Не удалось прочитать обложку: {error}"))?;
     Ok(covers)
+}
+
+pub fn get(
+    connection: &Connection,
+    kind: CoverKind,
+    entity_id: &str,
+) -> Result<Option<Cover>, String> {
+    connection
+        .query_row(
+            "SELECT id, entity_id, path_file FROM covers WHERE kind = ?1 AND entity_id = ?2",
+            params![kind.as_str(), entity_id],
+            |row| {
+                Ok(Cover {
+                    id: row.get(0)?,
+                    kind,
+                    entity_id: row.get(1)?,
+                    path_file: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| format!("Не удалось получить обложку: {error}"))
 }
 
 pub fn set(connection: &Connection, cover: &Cover) -> Result<Option<String>, String> {
@@ -78,4 +119,42 @@ pub fn remove_entity(
         )
         .map_err(|error| format!("Не удалось удалить обложку: {error}"))?;
     Ok(old_paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{backfill_track_covers, initialize};
+    use crate::database::tracks;
+    use rusqlite::Connection;
+
+    #[test]
+    fn existing_track_cover_is_copied_into_track_record() {
+        let connection = Connection::open_in_memory().unwrap();
+        tracks::initialize(&connection).unwrap();
+        initialize(&connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO tracks (id, path, title, duration) VALUES ('track-1', 'song.mp3', 'Song', 90)",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO covers (id, kind, entity_id, path_file)
+                 VALUES ('cover-1', 'track', 'track-1', 'covers/cover.jpg')",
+                [],
+            )
+            .unwrap();
+
+        backfill_track_covers(&connection).unwrap();
+
+        assert_eq!(
+            tracks::get(&connection, "track-1")
+                .unwrap()
+                .unwrap()
+                .cover
+                .as_deref(),
+            Some("covers/cover.jpg")
+        );
+    }
 }

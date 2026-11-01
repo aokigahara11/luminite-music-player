@@ -49,7 +49,15 @@ pub fn record(connection: &Connection, item: &RecentItem) -> Result<(), String> 
         )
         .map_err(|error| format!("Не удалось обновить историю: {error}"))?;
     transaction
-        .execute("UPDATE recent_items SET position = position + 1", [])
+        .execute(
+            "WITH ranked AS (
+                 SELECT rowid, ROW_NUMBER() OVER (ORDER BY position, rowid) AS new_position
+                 FROM recent_items
+             )
+             UPDATE recent_items
+             SET position = (SELECT new_position FROM ranked WHERE ranked.rowid = recent_items.rowid)",
+            [],
+        )
         .map_err(|error| format!("Не удалось упорядочить историю: {error}"))?;
     transaction
         .execute(
@@ -89,7 +97,7 @@ mod tests {
     use rusqlite::Connection;
 
     #[test]
-    fn recording_moves_item_to_front_and_limits_history() {
+    fn recording_existing_item_keeps_other_recent_items() {
         let connection = Connection::open_in_memory().unwrap();
         initialize(&connection).unwrap();
         for index in 0..6 {
@@ -102,18 +110,29 @@ mod tests {
             )
             .unwrap();
         }
-        record(
-            &connection,
-            &RecentItem {
-                kind: RecentItemKind::Track,
-                entity_id: "track-1".to_string(),
-            },
-        )
-        .unwrap();
+        for _ in 0..3 {
+            record(
+                &connection,
+                &RecentItem {
+                    kind: RecentItemKind::Track,
+                    entity_id: "track-1".to_string(),
+                },
+            )
+            .unwrap();
+        }
 
         let history = all(&connection).unwrap();
         assert_eq!(history.len(), 5);
         assert_eq!(history[0].entity_id, "track-1");
         assert!(!history.iter().any(|item| item.entity_id == "track-0"));
+        assert_eq!(
+            history
+                .iter()
+                .filter(|item| item.entity_id == "track-1")
+                .count(),
+            1
+        );
+        assert!(history.iter().any(|item| item.entity_id == "track-2"));
+        assert!(history.iter().any(|item| item.entity_id == "track-5"));
     }
 }

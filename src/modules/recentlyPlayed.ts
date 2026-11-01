@@ -5,7 +5,7 @@ import { state } from "../state";
 import type { RecentItemKind } from "../types";
 import { escapeHtml } from "../utils/format";
 import { playTrack } from "./playerbar";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { resolveCoverSource } from "../assets";
 
 export let recentSaveQueue: Promise<void> = Promise.resolve();
 
@@ -18,7 +18,7 @@ export function renderRecentlyPlayed() {
     }
 
     homeElements.recentlyPlayedGrid.innerHTML = items.map((item) => {
-        const coverPath = item.cover.source === "file" ? convertFileSrc(item.cover.path) : item.cover.path;
+        const coverPath = resolveCoverSource(item.cover.path);
         const cover = escapeHtml(coverPath);
         const title = escapeHtml(item.title);
         const cardCover = item.kind === "track"

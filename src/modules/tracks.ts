@@ -7,6 +7,7 @@ import { elements as playerbarElements } from "../elements/playerbar";
 import { elements as sidebarElements } from "../elements/sidebar";
 import { mapStoredTrack } from "../mappers";
 import { state } from "../state";
+import { DEFAULT_TRACK_COVER } from "../assets";
 import type { Track } from "../types";
 import { formatTime, truncate } from "../utils/format";
 import { showToast } from "../utils/toast";
@@ -232,8 +233,8 @@ export async function deleteTrackFromLibrary(trackId: string) {
         sidebarElements.changeTrackCoverBtn.disabled = true;
         updateFavoriteButton();
         sidebarElements.sidebarCoverWrapper.classList.remove("has-cover");
-        playerbarElements.playerCover.src = "./src/assets/media_library.jpg";
-        sidebarElements.sidebarCover.src = "./src/assets/media_library.jpg";
+        playerbarElements.playerCover.src = DEFAULT_TRACK_COVER;
+        sidebarElements.sidebarCover.src = DEFAULT_TRACK_COVER;
         closeTrackEditor();
         updatePlayButtonIcon();
         updateProgressDisplay(0);

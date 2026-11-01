@@ -10,7 +10,8 @@ pub fn initialize(connection: &Connection) -> Result<(), String> {
                  title TEXT NOT NULL,
                  artist TEXT,
                  duration INTEGER NOT NULL,
-                 play_count INTEGER NOT NULL DEFAULT 0
+                 play_count INTEGER NOT NULL DEFAULT 0,
+                 cover TEXT
              );",
         )
         .map_err(|error| format!("Не удалось создать таблицу tracks: {error}"))?;
@@ -32,12 +33,26 @@ pub fn initialize(connection: &Connection) -> Result<(), String> {
             )
             .map_err(|error| format!("Не удалось добавить счётчик прослушиваний: {error}"))?;
     }
+    let has_cover: bool = connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('tracks') WHERE name = 'cover'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Не удалось проверить столбцы таблицы tracks: {error}"))?;
+    if !has_cover {
+        connection
+            .execute("ALTER TABLE tracks ADD COLUMN cover TEXT", [])
+            .map_err(|error| format!("Не удалось добавить обложки треков: {error}"))?;
+    }
     Ok(())
 }
 
 pub fn all(connection: &Connection) -> Result<Vec<Track>, String> {
     let mut statement = connection
-        .prepare("SELECT id, path, title, artist, duration, play_count FROM tracks ORDER BY rowid")
+        .prepare("SELECT id, path, title, artist, duration, play_count, cover FROM tracks ORDER BY rowid")
         .map_err(|error| format!("Не удалось получить треки: {error}"))?;
     let tracks = statement
         .query_map([], |row| {
@@ -48,6 +63,7 @@ pub fn all(connection: &Connection) -> Result<Vec<Track>, String> {
                 artist: row.get(3)?,
                 duration: row.get(4)?,
                 play_count: row.get(5)?,
+                cover: row.get(6)?,
             })
         })
         .map_err(|error| format!("Не удалось прочитать треки: {error}"))?
@@ -59,7 +75,7 @@ pub fn all(connection: &Connection) -> Result<Vec<Track>, String> {
 pub fn get(connection: &Connection, id: &str) -> Result<Option<Track>, String> {
     connection
         .query_row(
-            "SELECT id, path, title, artist, duration, play_count FROM tracks WHERE id = ?1",
+            "SELECT id, path, title, artist, duration, play_count, cover FROM tracks WHERE id = ?1",
             [id],
             |row| {
                 Ok(Track {
@@ -69,6 +85,7 @@ pub fn get(connection: &Connection, id: &str) -> Result<Option<Track>, String> {
                     artist: row.get(3)?,
                     duration: row.get(4)?,
                     play_count: row.get(5)?,
+                    cover: row.get(6)?,
                 })
             },
         )
@@ -79,17 +96,31 @@ pub fn get(connection: &Connection, id: &str) -> Result<Option<Track>, String> {
 pub fn insert(connection: &Connection, track: &Track) -> Result<(), String> {
     connection
         .execute(
-            "INSERT INTO tracks (id, path, title, artist, duration) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO tracks (id, path, title, artist, duration, cover) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 track.id,
                 track.path,
                 track.title,
                 track.artist,
-                track.duration
+                track.duration,
+                track.cover
             ],
         )
         .map(|_| ())
         .map_err(|error| format!("Не удалось сохранить трек: {error}"))
+}
+
+pub fn set_cover(connection: &Connection, id: &str, cover: Option<&str>) -> Result<(), String> {
+    let changed = connection
+        .execute(
+            "UPDATE tracks SET cover = ?1 WHERE id = ?2",
+            params![cover, id],
+        )
+        .map_err(|error| format!("Не удалось сохранить обложку трека: {error}"))?;
+    if changed == 0 {
+        return Err("Трек с таким ID не найден".to_string());
+    }
+    Ok(())
 }
 
 pub fn record_play(connection: &Connection, id: &str) -> Result<u32, String> {
@@ -99,7 +130,7 @@ pub fn record_play(connection: &Connection, id: &str) -> Result<u32, String> {
             [id],
         )
         .map_err(|error| format!("Не удалось записать прослушивание трека: {error}"))?;
-    
+
     if changed == 0 {
         return Err("Трек с таким ID не найден".to_string());
     }
@@ -162,7 +193,7 @@ pub fn search(connection: &Connection, query: &str) -> Result<Vec<Track>, String
 
 #[cfg(test)]
 mod tests {
-    use super::{initialize, record_play};
+    use super::{get, initialize, record_play, set_cover};
     use rusqlite::Connection;
 
     #[test]
@@ -185,5 +216,15 @@ mod tests {
         initialize(&connection).unwrap();
         assert_eq!(record_play(&connection, "track-1").unwrap(), 1);
         assert_eq!(record_play(&connection, "track-1").unwrap(), 2);
+        assert_eq!(get(&connection, "track-1").unwrap().unwrap().cover, None);
+        set_cover(&connection, "track-1", Some("covers/cover.jpg")).unwrap();
+        assert_eq!(
+            get(&connection, "track-1")
+                .unwrap()
+                .unwrap()
+                .cover
+                .as_deref(),
+            Some("covers/cover.jpg")
+        );
     }
 }

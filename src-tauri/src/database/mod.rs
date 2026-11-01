@@ -17,5 +17,6 @@ pub fn initialize_schema(database: &Database) -> Result<(), String> {
     covers::initialize(&connection)?;
     recently_played::initialize(&connection)?;
     player_config::initialize(&connection)?;
-    migration::initialize(&connection, &database.app_dir)
+    migration::initialize(&connection, &database.app_dir)?;
+    covers::backfill_track_covers(&connection)
 }

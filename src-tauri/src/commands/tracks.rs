@@ -1,5 +1,6 @@
 use std::{
     fs,
+    panic::{catch_unwind, AssertUnwindSafe},
     path::{Path, PathBuf},
 };
 
@@ -170,32 +171,42 @@ pub fn edit_metadata_track(
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
     let mut track =
         tracks::get(&connection, &id)?.ok_or_else(|| "Трек с таким ID не найден".to_string())?;
+    drop(connection);
     let track_path = PathBuf::from(&track.path);
     if !track_path.is_file() {
         return Err("Файл трека не найден".to_string());
     }
 
-    let mut tagged_file = Probe::open(&track_path)
-        .map_err(|error| format!("Ошибка открытия трека: {error}"))?
-        .read()
-        .map_err(|error| format!("Ошибка чтения тегов трека: {error}"))?;
-    if tagged_file.primary_tag().is_none() {
-        tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
-    }
-    if let Some(tag) = tagged_file.primary_tag_mut() {
-        tag.set_title(title.to_string());
-        if artist.is_empty() {
-            tag.remove_artist();
-        } else {
-            tag.set_artist(artist.to_string());
+    catch_unwind(AssertUnwindSafe(|| {
+        let mut tagged_file = Probe::open(&track_path)
+            .map_err(|error| format!("Ошибка открытия трека: {error}"))?
+            .read()
+            .map_err(|error| format!("Ошибка чтения тегов трека: {error}"))?;
+        if tagged_file.primary_tag().is_none() {
+            tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
         }
-    }
-    tagged_file
-        .save_to_path(&track_path, WriteOptions::default())
-        .map_err(|error| format!("Ошибка сохранения тегов трека: {error}"))?;
+        if let Some(tag) = tagged_file.primary_tag_mut() {
+            tag.set_title(title.to_string());
+            if artist.is_empty() {
+                tag.remove_artist();
+            } else {
+                tag.set_artist(artist.to_string());
+            }
+        }
+        tagged_file
+            .save_to_path(&track_path, WriteOptions::default())
+            .map_err(|error| format!("Ошибка сохранения тегов трека: {error}"))
+    }))
+    .map_err(|_| {
+        "Не удалось изменить метаданные: обработчик аудиофайла завершился с ошибкой".to_string()
+    })??;
 
     track.title = title.to_string();
     track.artist = (!artist.is_empty()).then(|| artist.to_string());
+    let connection = database
+        .connection
+        .lock()
+        .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
     tracks::update_metadata(&connection, &id, &track.title, track.artist.as_deref())?;
     Ok(track)
 }
@@ -224,5 +235,6 @@ pub fn parse_track_metadata(file_path: &std::path::Path) -> Result<Track, String
         artist: tag.and_then(|value| value.artist().map(|value| value.to_string())),
         duration: tagged_file.properties().duration().as_secs() as u32,
         play_count: 0,
+        cover: None,
     })
 }

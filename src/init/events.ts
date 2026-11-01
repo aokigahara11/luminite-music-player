@@ -59,11 +59,24 @@ export async function initEvents() {
     }
     await loadAudioSettings();
     window.addEventListener("resize", updateTrackTextMarquee);
-    document.addEventListener("click", () => {
+    const closeMobileTrackPanel = () => {
+        document.body.classList.remove("mobile-track-panel-open");
+        sidebarElements.mobileTrackDetailsBtn?.setAttribute("aria-expanded", "false");
+    };
+    sidebarElements.mobileTrackDetailsBtn?.addEventListener("click", () => {
+        const isOpen = document.body.classList.toggle("mobile-track-panel-open");
+        sidebarElements.mobileTrackDetailsBtn.setAttribute("aria-expanded", String(isOpen));
+    });
+    document.addEventListener("click", (event) => {
         document.querySelectorAll<HTMLElement>(".track-actions-popover:not([hidden])").forEach((menu) => {
             menu.hidden = true;
             menu.closest(".track-actions-menu")?.querySelector(".track-menu-trigger")?.setAttribute("aria-expanded", "false");
         });
+        const target = event.target;
+        if (target instanceof Element
+            && !target.closest("#sidebar-right-panel, #mobile-track-details-btn")) {
+            closeMobileTrackPanel();
+        }
     });
     
     document.addEventListener("keydown", (event) => {
@@ -75,6 +88,7 @@ export async function initEvents() {
             trigger?.setAttribute("aria-expanded", "false");
             trigger?.focus();
         });
+        closeMobileTrackPanel();
     });
     
     // Навигация

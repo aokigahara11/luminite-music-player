@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Music Player</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
@@ -135,15 +135,15 @@
             </button>
           </div>
           
-          <div class="content-section" style="margin-top: 32px;">
+          <div class="content-section home-content-section">
             <!-- Недавно прослушано -->
-            <div class="section-header">
+            <div class="section-header home-section-header">
               <h3 class="section-subtitle">Недавно прослушано</h3>
             </div>
             <div class="cards-grid" id="recently-played-grid"></div>
 
             <!-- Плейлисты -->
-            <div class="section-header" style="margin-top: 32px;">
+            <div class="section-header home-section-header home-section-header-spaced">
               <h3 class="section-subtitle">Плейлисты</h3>
             </div>
             
@@ -477,7 +477,7 @@
       </main>
 
       <!-- Боковая панель с информацией (справа) -->
-      <aside class="sidebar-right">
+      <aside class="sidebar-right" id="sidebar-right-panel">
         <div class="sidebar-card">
           <div class="sidebar-heading-right">Сейчас играет</div>
     
@@ -542,6 +542,13 @@
               </svg>
               <svg class="icon-svg icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
+            <button class="mobile-track-details-button" id="mobile-track-details-btn" type="button" aria-label="Показать действия трека" aria-controls="sidebar-right-panel" aria-expanded="false" disabled>
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <circle cx="5" cy="12" r="2"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+                <circle cx="19" cy="12" r="2"></circle>
               </svg>
             </button>
           </div>

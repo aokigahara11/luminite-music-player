@@ -6,6 +6,7 @@ import { elements as playerbarElements } from "../elements/playerbar";
 import { elements } from "../elements/settings";
 import { elements as sidebarElements } from "../elements/sidebar";
 import { state } from "../state";
+import { DEFAULT_TRACK_COVER } from "../assets";
 import { showToast } from "../utils/toast";
 import { loadSavedData } from "./library";
 import { resetListenProgress, updateFavoriteButton } from "./sidebar";
@@ -236,8 +237,8 @@ export async function deleteAllAppData() {
         sidebarElements.sidebarRemixBtn.disabled = true;
         sidebarElements.sidebarAddToPlaylistBtn.disabled = true;
         sidebarElements.changeTrackCoverBtn.disabled = true;
-        playerbarElements.playerCover.src = "./src/assets/media_library.jpg";
-        sidebarElements.sidebarCover.src = "./src/assets/media_library.jpg";
+        playerbarElements.playerCover.src = DEFAULT_TRACK_COVER;
+        sidebarElements.sidebarCover.src = DEFAULT_TRACK_COVER;
         sidebarElements.sidebarCoverWrapper.classList.remove("has-cover");
         updateFavoriteButton();
         updatePlayButtonIcon();

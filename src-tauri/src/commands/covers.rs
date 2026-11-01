@@ -76,7 +76,21 @@ pub fn set_cover(
     fs::copy(&source_path, &cover.path_file)
         .map_err(|error| format!("Ошибка копирования обложки: {error}"))?;
 
-    match covers::set(&connection, &cover) {
+    let result = (|| {
+        let transaction = connection
+            .unchecked_transaction()
+            .map_err(|error| format!("Не удалось начать сохранение обложки: {error}"))?;
+        let old_path = covers::set(&transaction, &cover)?;
+        if kind == CoverKind::Track {
+            tracks::set_cover(&transaction, &cover.entity_id, Some(&cover.path_file))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("Не удалось завершить сохранение обложки: {error}"))?;
+        Ok(old_path)
+    })();
+
+    match result {
         Ok(old_path) => {
             drop(connection);
             if let Some(old_path) = old_path.filter(|path| path != &cover.path_file) {

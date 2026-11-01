@@ -6,6 +6,7 @@ import { elements } from "../elements/home";
 import { elements as playlistsElements } from "../elements/playlists";
 import { mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
+import { FAVORITES_COVER, REMIXES_COVER } from "../assets";
 import type { PlaylistCategory, Track } from "../types";
 import { showToast } from "../utils/toast";
 import { reloadTrackAudio, updateTrackMetadata } from "./sidebar";
@@ -75,7 +76,10 @@ export async function submitPlaylistForm() {
     try {
         if (playlistToEditId) {
             const storedPlaylist = await api.editPlaylist(playlistToEditId, name, category);
-            const updatedPlaylist = mapStoredPlaylist(storedPlaylist);
+            const updatedPlaylist = {
+                ...mapStoredPlaylist(storedPlaylist),
+                cover: state.playlists.find((playlist) => playlist.id === storedPlaylist.id)?.cover,
+            };
             state.playlists = state.playlists.map((playlist) => playlist.id === updatedPlaylist.id ? updatedPlaylist : playlist);
             renderPlaylists();
             renderPlaylistDetail();
@@ -130,9 +134,9 @@ export function renderPlaylists() {
                         ${pl.cover
             ? `<img src="${pl.cover}" alt="Обложка: ${pl.title}" />`
             : pl.id === FAVORITES_PLAYLIST_ID
-                ? `<img src="./src/assets/favorites.jpg" alt="Обложка: ${pl.title}" />`
+                ? `<img src="${FAVORITES_COVER}" alt="Обложка: ${pl.title}" />`
                 : pl.id === REMIXES_PLAYLIST_ID
-                    ? `<img src="./src/assets/remixes.jpg" alt="Обложка: ${pl.title}" />`
+                    ? `<img src="${REMIXES_COVER}" alt="Обложка: ${pl.title}" />`
                     : "🎵"}
                     </div>
         </div>
@@ -202,8 +206,8 @@ export function renderAddToPlaylistOptions() {
     playlistsElements.modalPlaylistsList.innerHTML = matchingPlaylists
         .map((playlist) => {
         const cover = playlist.cover
-            || (playlist.id === FAVORITES_PLAYLIST_ID ? "./src/assets/favorites.jpg" : "")
-            || (playlist.id === REMIXES_PLAYLIST_ID ? "./src/assets/remixes.jpg" : "");
+            || (playlist.id === FAVORITES_PLAYLIST_ID ? FAVORITES_COVER : "")
+            || (playlist.id === REMIXES_PLAYLIST_ID ? REMIXES_COVER : "");
         return `
                 <button class="modal-playlist-item modal-pl-item" type="button" data-id="${playlist.id}">
                     <span class="modal-playlist-cover">

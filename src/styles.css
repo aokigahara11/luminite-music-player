@@ -550,6 +550,10 @@ input[type="range"]:hover::-webkit-slider-thumb {
   margin-left: 4px;
 }
 
+.mobile-track-details-button {
+  display: none;
+}
+
 .track-actions .btn-ctrl {
   padding: 6px;
   width: 32px;
@@ -769,22 +773,6 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .cover-hover-button:focus-visible {
   outline: 2px solid #fff;
   outline-offset: -4px;
-}
-
-.sidebar-cover-wrapper:not(.has-cover)::after {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.4);
-  content: "♫";
-  font-family: Georgia, serif;
-  font-size: 30px;
-  pointer-events: none;
-}
-
-.sidebar-cover-wrapper:not(.has-cover) .sidebar-cover {
-  opacity: 0;
 }
 
 .sidebar-heading-right {
@@ -1362,7 +1350,23 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .section-subtitle {
   font-size: 20px;
   font-weight: 600;
+  line-height: 24px;
+  margin: 0;
+}
+
+.home-content-section {
+  margin-top: 32px;
+}
+
+.home-section-header {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
   margin-bottom: 16px;
+}
+
+.home-section-header-spaced {
+  margin-top: 32px;
 }
 
 .quick-actions {
@@ -2645,5 +2649,275 @@ input[type="range"]:hover::-webkit-slider-thumb {
   .track-list-header .col-artist,
   .track-row .col-artist {
     display: none;
+  }
+}
+
+@media (max-width: 650px) {
+  html,
+  body {
+    height: 100%;
+    height: 100dvh;
+  }
+
+  .top-panel {
+    height: 92px;
+    padding: 8px 14px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 24px 42px;
+    gap: 6px;
+  }
+
+  .app-title {
+    font-size: 15px;
+  }
+
+  .top-panel-right {
+    display: none;
+  }
+
+  .search-container {
+    grid-row: 2;
+    max-width: none;
+  }
+
+  .main-content {
+    top: 92px;
+    right: 0;
+    bottom: calc(164px + env(safe-area-inset-bottom));
+    left: 0;
+    padding: 18px 14px;
+    gap: 24px;
+  }
+
+  .sidebar-right {
+    display: none;
+  }
+
+  .mobile-track-details-button {
+    display: none;
+  }
+
+  body.mobile-track-panel-open .sidebar-right {
+    position: fixed;
+    top: auto;
+    right: 8px;
+    bottom: calc(158px + env(safe-area-inset-bottom));
+    left: 8px;
+    display: flex;
+    width: auto;
+    max-height: min(45dvh, 360px);
+    padding: 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  body.mobile-track-panel-open .sidebar-card {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-areas:
+      "heading heading"
+      "cover meta"
+      "actions actions"
+      "form form";
+    gap: 10px;
+  }
+
+  body.mobile-track-panel-open .sidebar-heading-right {
+    grid-area: heading;
+  }
+
+  body.mobile-track-panel-open .sidebar-cover-wrapper {
+    grid-area: cover;
+    width: 64px;
+    height: 64px;
+  }
+
+  body.mobile-track-panel-open .sidebar-meta {
+    grid-area: meta;
+    min-width: 0;
+  }
+
+  body.mobile-track-panel-open .sidebar-player-actions {
+    grid-area: actions;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  body.mobile-track-panel-open .sidebar-action-button {
+    min-width: 0;
+    padding: 8px 4px;
+    font-size: 11px;
+  }
+
+  body.mobile-track-panel-open .sidebar-edit-form,
+  body.mobile-track-panel-open .sidebar-edit-status {
+    grid-area: form;
+  }
+
+  .sidebar-left {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(58px + env(safe-area-inset-bottom));
+    padding: 4px 8px env(safe-area-inset-bottom);
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 2px;
+    overflow: hidden;
+    border-top: 1px solid var(--border-subtle);
+    border-right: 0;
+  }
+
+  .sidebar-left .sidebar-card,
+  .sidebar-left .sidebar-controls {
+    display: contents;
+  }
+
+  .sidebar-heading-left {
+    display: none;
+  }
+
+  .sidebar-left .btn-ctrl,
+  .sidebar-left > #downloader-btn,
+  .sidebar-left > #settings-btn {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    min-height: 48px;
+    padding: 5px 2px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 9px;
+    font-size: 10px;
+  }
+
+  .sidebar-left .btn-ctrl .icon-svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .sidebar-left .btn-ctrl span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-left .btn-ctrl.active,
+  .sidebar-left .btn-ctrl:hover {
+    box-shadow: none;
+  }
+
+  .player-bar {
+    bottom: calc(58px + env(safe-area-inset-bottom));
+    width: calc(100vw - 16px);
+    height: 90px;
+    padding: 8px 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) 14px;
+    gap: 4px 8px;
+    border-radius: 14px;
+  }
+
+  .track-info {
+    min-width: 0;
+    grid-row: 1;
+    grid-column: 1;
+    gap: 8px;
+  }
+
+  .track-cover-img {
+    width: 42px;
+    height: 42px;
+  }
+
+  .track-text {
+    max-width: none;
+  }
+
+  .track-title {
+    font-size: 12px;
+  }
+
+  .track-artist {
+    font-size: 10px;
+  }
+
+  .track-actions {
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .mobile-track-details-button {
+    display: flex;
+    width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+  }
+
+  .mobile-track-details-button .icon-svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .mobile-track-details-button:focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 2px;
+  }
+
+  .player-center {
+    display: contents;
+  }
+
+  .controls {
+    grid-row: 1;
+    grid-column: 2;
+    gap: 2px;
+  }
+
+  .controls .btn-ctrl {
+    min-width: 28px;
+    padding: 4px;
+  }
+
+  .controls .icon-svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .controls .play-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .progress-container {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    gap: 8px;
+  }
+
+  .time-text {
+    font-size: 10px;
+  }
+
+  .volume-control {
+    display: none;
+  }
+
+  .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: 12px;
   }
 }

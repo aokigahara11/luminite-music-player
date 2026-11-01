@@ -45,6 +45,7 @@ export interface StoredTrack {
     artist: string | null;
     duration: number;
     play_count: number;
+    cover: string | null;
 }
 
 export interface DownloadedFile {

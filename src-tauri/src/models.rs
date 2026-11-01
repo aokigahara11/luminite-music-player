@@ -12,6 +12,8 @@ pub struct Track {
     pub duration: u32,
     #[serde(default)]
     pub play_count: u32,
+    #[serde(default)]
+    pub cover: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

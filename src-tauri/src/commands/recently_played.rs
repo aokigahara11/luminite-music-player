@@ -103,6 +103,17 @@ fn resolve_recent_items(
                 .iter()
                 .find(|cover| cover.kind == cover_kind && cover.entity_id == item.entity_id)
                 .map(|cover| RecentCover::File(cover.path_file.clone()))
+                .or_else(|| {
+                    if item.kind == RecentItemKind::Track {
+                        tracks
+                            .iter()
+                            .find(|track| track.id == item.entity_id)
+                            .and_then(|track| track.cover.clone())
+                            .map(RecentCover::Asset)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| RecentCover::Asset(default_cover.to_string()));
 
             Some(RecentEntry {

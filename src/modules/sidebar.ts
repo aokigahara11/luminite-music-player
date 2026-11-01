@@ -4,6 +4,7 @@ import { player, savePlayerConfig } from "../core/player";
 import { elements } from "../elements/sidebar";
 import { elements as playerbarElements } from "../elements/playerbar";
 import { mapStoredTrack } from "../mappers";
+import { DEFAULT_TRACK_COVER } from "../assets";
 import { state } from "../state";
 import type { AudioStatus, Track } from "../types";
 import { showToast } from "../utils/toast";
@@ -40,7 +41,7 @@ export function resetListenProgress(): void {
 
 // Обновляет метаданные текущего трека в боковой панели и плеере.
 export function updateTrackMetadata(track: Track): void {
-    const cover = track.cover || "./src/assets/media_library.jpg";
+    const cover = track.cover || DEFAULT_TRACK_COVER;
     elements.sidebarCoverWrapper.classList.toggle("has-cover", Boolean(track.cover));
     playerbarElements.playerTitle.textContent = track.title;
     playerbarElements.playerArtist.textContent = track.artist;
@@ -51,13 +52,20 @@ export function updateTrackMetadata(track: Track): void {
     elements.sidebarRemixBtn.disabled = false;
     elements.sidebarAddToPlaylistBtn.disabled = false;
     elements.changeTrackCoverBtn.disabled = false;
+    elements.mobileTrackDetailsBtn.disabled = false;
     updateFavoriteButton();
     requestAnimationFrame(requireCallbacks().updateTrackTextMarquee);
 
-    [playerbarElements.playerCover, elements.sidebarCover].forEach((image) => {
-        image.src = cover;
-        image.alt = track.title;
-    });
+    playerbarElements.playerCover.src = cover;
+    playerbarElements.playerCover.alt = track.title;
+
+    elements.sidebarCover.onerror = () => {
+        elements.sidebarCover.onerror = null;
+        if (elements.sidebarCover.getAttribute("src") === cover)
+            elements.sidebarCover.src = DEFAULT_TRACK_COVER;
+    };
+    elements.sidebarCover.src = cover;
+    elements.sidebarCover.alt = track.title;
 }
 
 // Отслеживает прослушанное время и записывает засчитанное воспроизведение
@@ -171,7 +179,7 @@ export async function saveTrackMetadata(): Promise<void> {
         }
 
         const storedTrack = await api.editTrack(track.id, title, artist);
-        const updatedTrack = { ...mapStoredTrack(storedTrack), cover: track.cover };
+        const updatedTrack = mapStoredTrack(storedTrack);
         state.tracks = state.tracks.map((item) => item.id === updatedTrack.id ? updatedTrack : item);
         if (state.currentTrackId === updatedTrack.id) {
             updateTrackMetadata(updatedTrack);
