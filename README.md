@@ -21,18 +21,32 @@
 ```text
 ├── src/                  # Фронтенд (UI, логика плеера, стили)
 │   ├── assets/           # Иконки и статические ресурсы интерфейса
-│   ├── main.ts           # Точка входа TypeScript
+│   ├── core/             # Состояние плеера, навигация и константы
+│   ├── elements/         # DOM-ссылки по областям интерфейса
+│   ├── init/events.ts    # Подключение обработчиков приложения
+│   ├── modules/          # library, tracks, playlists, playerbar, sidebar,
+│   │                     # downloader, covers, recentlyPlayed, remix,
+│   │                     # search и settings
+│   ├── utils/            # format.ts и toast.ts
+│   ├── main.ts           # Композиция модулей и точка входа
+│   ├── elements.ts       # Общий экспорт DOM-ссылок
 │   └── styles.css        # Стили приложения
 ├── src-tauri/            # Бэкенд (Rust)
 │   ├── src/
-│   │   ├── lib.rs        # Инициализация Tauri и обработка IPC
-│   │   └── main.rs       # Точка входа Rust-приложения
+│   │   ├── commands/     # Команды Tauri для IPC: audio, tracks, playlists,
+│   │   │                 # covers, downloader, playback, настройки и история
+│   │   ├── database/     # SQLite: схема, миграции и запросы по сущностям
+│   │   ├── audio.rs     # AudioEngine и обработка/рендеринг аудио
+│   │   ├── models.rs    # Модели данных, сериализуемые через Serde
+│   │   ├── lib.rs       # Инициализация приложения, состояния и IPC-команд
+│   │   └── main.rs      # Точка входа Rust-приложения
 │   ├── capabilities/     # Настройки прав и разрешений
 │   ├── icons/            # Иконки приложения для сборки
 │   ├── Cargo.toml        # Зависимости Rust
 │   └── tauri.conf.json   # Конфигурация Tauri
 └── package.json          # Зависимости Node.js / Скрипты
 ```
+
 ## Установка
 
 Самый простой и быстрый способ установить Luminite на Windows — скачать готовый инсталлятор из официальных релизов:
@@ -41,6 +55,22 @@
 
 * В блоке последней версии найдите раздел Assets.
 
-* Скачайте файл установщика .msi (например, luminite_1.0.0_x64_en-US.msi).
+* Скачайте MSI-установщик для вашей системы из раздела Assets.
 
 * Запустите скачанный файл и следуйте инструкциям на экране, чтобы завершить установку.
+
+### Из корня проекта:
+
+```bash
+# Запустить приложение в режиме разработки
+npm run tauri dev
+
+# Собрать приложение
+npm run tauri build
+
+# Проверить Rust-бэкенд
+cargo check --manifest-path src-tauri/Cargo.toml
+
+# Проверить форматирование Rust-кода
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+```
