@@ -11,6 +11,7 @@ const RECENT_ITEMS_LIMIT: usize = 5;
 const DEFAULT_TRACK_COVER: &str = "./src/assets/media_library.jpg";
 const DEFAULT_FAVORITES_COVER: &str = "./src/assets/favorites.jpg";
 
+/// Получить недавно прослушанные
 #[tauri::command]
 pub fn get_recently_played(database: State<'_, Database>) -> Result<Vec<RecentEntry>, String> {
     let connection = database
@@ -24,8 +25,9 @@ pub fn get_recently_played(database: State<'_, Database>) -> Result<Vec<RecentEn
     Ok(resolve_recent_items(&items, &tracks, &playlists, &covers))
 }
 
+/// Добавление трека в недавно прослушанные
 #[tauri::command]
-pub fn record_recently_played(
+pub fn add_recently_played(
     database: State<'_, Database>,
     kind: RecentItemKind,
     entity_id: String,
@@ -34,6 +36,8 @@ pub fn record_recently_played(
         .connection
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
+
+    // Проверка сущестовования
     let entity_exists = match kind {
         RecentItemKind::Track => tracks::get(&connection, &entity_id)?.is_some(),
         RecentItemKind::Playlist => playlists::all(&connection)?
@@ -51,6 +55,8 @@ pub fn record_recently_played(
     Ok(resolve_recent_items(&items, &tracks, &playlists, &covers))
 }
 
+/// Превращает сырые ID истории в готовые карточки с названиями,
+/// авторами и обложками (с ограничением по количеству и фильтрацией удаленных элементов).
 fn resolve_recent_items(
     items: &[RecentItem],
     tracks: &[crate::models::Track],
@@ -74,6 +80,7 @@ fn resolve_recent_items(
                         DEFAULT_TRACK_COVER,
                     )
                 }
+
                 RecentItemKind::Playlist => {
                     let playlist = playlists
                         .iter()
@@ -91,11 +98,13 @@ fn resolve_recent_items(
                     )
                 }
             };
+
             let cover = covers
                 .iter()
                 .find(|cover| cover.kind == cover_kind && cover.entity_id == item.entity_id)
                 .map(|cover| RecentCover::File(cover.path_file.clone()))
                 .unwrap_or_else(|| RecentCover::Asset(default_cover.to_string()));
+
             Some(RecentEntry {
                 kind: item.kind,
                 entity_id: item.entity_id.clone(),

@@ -18,11 +18,13 @@ use crate::{
     models::{CoverKind, RecentItemKind, Track},
 };
 
+/// Импортирование трека
 #[tauri::command]
 pub fn import_track(database: State<'_, Database>, file_path: String) -> Result<Track, String> {
     import_track_file(&database, Path::new(&file_path), false)
 }
 
+/// Импортирование сгенерированного трека, например: ремикс
 pub fn import_generated_track(
     database: &Database,
     file_path: &Path,
@@ -37,9 +39,11 @@ pub fn import_generated_track(
         if tagged_file.primary_tag().is_none() {
             tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
         }
+
         if let Some(tag) = tagged_file.primary_tag_mut() {
             tag.set_artist(artist.to_string());
         }
+
         tagged_file
             .save_to_path(file_path, WriteOptions::default())
             .map_err(|error| format!("Не удалось сохранить исполнителя в ремиксе: {error}"))?;
@@ -47,6 +51,7 @@ pub fn import_generated_track(
     import_track_file(database, file_path, true)
 }
 
+/// Импорт файла трека
 fn import_track_file(
     database: &Database,
     source_path: &Path,
@@ -93,6 +98,7 @@ fn import_track_file(
     result
 }
 
+/// Получить медатеку (все треки)
 #[tauri::command]
 pub fn get_library(database: State<'_, Database>) -> Result<Vec<Track>, String> {
     let connection = database
@@ -102,6 +108,7 @@ pub fn get_library(database: State<'_, Database>) -> Result<Vec<Track>, String> 
     tracks::all(&connection)
 }
 
+/// Воспроизведение трека
 #[tauri::command]
 pub fn record_track_play(database: State<'_, Database>, track_id: String) -> Result<u32, String> {
     let connection = database
@@ -111,6 +118,7 @@ pub fn record_track_play(database: State<'_, Database>, track_id: String) -> Res
     tracks::record_play(&connection, &track_id)
 }
 
+/// Поиск в медатеки
 #[tauri::command]
 pub fn search_library(database: State<'_, Database>, query: String) -> Result<Vec<Track>, String> {
     let connection = database
@@ -120,15 +128,18 @@ pub fn search_library(database: State<'_, Database>, query: String) -> Result<Ve
     tracks::search(&connection, &query)
 }
 
+/// Удаление трека
 #[tauri::command]
 pub fn delete_track(database: State<'_, Database>, track_id: String) -> Result<Vec<Track>, String> {
     let connection = database
         .connection
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
+
     let track = tracks::get(&connection, &track_id)?
         .ok_or_else(|| "Трек с таким ID не найден".to_string())?;
     tracks::delete(&connection, &track_id)?;
+
     let cover_paths = covers::remove_entity(&connection, CoverKind::Track, &track_id)?;
     recently_played::remove_entity(&connection, RecentItemKind::Track, &track_id)?;
     drop(connection);
@@ -140,89 +151,7 @@ pub fn delete_track(database: State<'_, Database>, track_id: String) -> Result<V
     get_library(database)
 }
 
-#[tauri::command]
-pub fn delete_all_data(database: State<'_, Database>) -> Result<(), String> {
-    let connection = database
-        .connection
-        .lock()
-        .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
-    let transaction = connection
-        .unchecked_transaction()
-        .map_err(|error| format!("Не удалось начать удаление данных: {error}"))?;
-    transaction
-        .execute_batch(
-            "DELETE FROM tracks;
-             DELETE FROM playlists;
-             DELETE FROM covers;
-             DELETE FROM recent_items;
-             UPDATE player_config SET current_track_id = NULL, position_secs = 0, volume = 0.7, is_playing = 0 WHERE id = 1;",
-        )
-        .map_err(|error| format!("Не удалось очистить данные приложения: {error}"))?;
-    crate::database::playlists::ensure_favorites(&transaction)?;
-    crate::database::playlists::ensure_remixes(&transaction)?;
-    transaction
-        .commit()
-        .map_err(|error| format!("Не удалось завершить удаление данных: {error}"))?;
-    drop(connection);
-
-    let mut removal_errors = Vec::new();
-    remove_directory_contents(&database.media_dir, &mut removal_errors);
-    remove_directory_contents(&database.covers_dir, &mut removal_errors);
-    for legacy_file in [
-        "library.json",
-        "covers.json",
-        "recently_played.json",
-        "config.json",
-    ] {
-        let path = database.app_dir.join(legacy_file);
-        if path.is_file() {
-            if let Err(error) = fs::remove_file(&path) {
-                removal_errors.push(format!("{}: {error}", path.display()));
-            }
-        }
-    }
-    if removal_errors.is_empty() {
-        Ok(())
-    } else {
-        Err(format!(
-            "Записи удалены, но некоторые файлы не удалось удалить: {}",
-            removal_errors.join("; ")
-        ))
-    }
-}
-
-fn remove_directory_contents(directory: &Path, errors: &mut Vec<String>) {
-    let entries = match fs::read_dir(directory) {
-        Ok(entries) => entries,
-        Err(error) => {
-            errors.push(format!("{}: {error}", directory.display()));
-            return;
-        }
-    };
-
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(error) => {
-                errors.push(format!("{}: {error}", directory.display()));
-                continue;
-            }
-        };
-        let path = entry.path();
-        let result = match entry.file_type() {
-            Ok(file_type) if file_type.is_dir() => fs::remove_dir_all(&path),
-            Ok(_) => fs::remove_file(&path),
-            Err(error) => {
-                errors.push(format!("{}: {error}", path.display()));
-                continue;
-            }
-        };
-        if let Err(error) = result {
-            errors.push(format!("{}: {error}", path.display()));
-        }
-    }
-}
-
+/// Изменения метаданных трека
 #[tauri::command]
 pub fn edit_metadata_track(
     database: State<'_, Database>,
@@ -271,6 +200,7 @@ pub fn edit_metadata_track(
     Ok(track)
 }
 
+/// Парсинг метаданных трека
 pub fn parse_track_metadata(file_path: &std::path::Path) -> Result<Track, String> {
     let tagged_file = Probe::open(file_path)
         .map_err(|error| format!("Ошибка открытия трека: {error}"))?

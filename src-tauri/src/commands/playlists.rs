@@ -10,6 +10,7 @@ use crate::{
     },
 };
 
+/// Создание плейлиста
 #[tauri::command]
 pub fn create_playlist(
     database: State<'_, Database>,
@@ -20,31 +21,37 @@ pub fn create_playlist(
     if name.is_empty() {
         return Err("Название плейлиста не должно быть пустым.".to_string());
     }
+
     let playlist = Playlist {
         id: Uuid::new_v4().to_string(),
         name: name.to_string(),
         category,
         id_tracks: Vec::new(),
     };
+
     let connection = database
         .connection
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
+
     playlists::create(&connection, &playlist)?;
     Ok(playlist)
 }
 
+/// Получить все плейлисты
 #[tauri::command]
 pub fn get_playlists(database: State<'_, Database>) -> Result<Vec<Playlist>, String> {
     let connection = database
         .connection
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
-    playlists::ensure_favorites(&connection)?;
-    playlists::ensure_remixes(&connection)?;
+
+    playlists::ensure_favorites(&connection)?; // Избранное
+    playlists::ensure_remixes(&connection)?; // Ремиксы
     playlists::all(&connection)
 }
 
+/// Добавление трека в плейлист
 #[tauri::command]
 pub fn add_track_to_playlist(
     database: State<'_, Database>,
@@ -58,6 +65,7 @@ pub fn add_track_to_playlist(
     playlists::add_track(&connection, &playlist_id, &track_id)
 }
 
+/// Удалить трек из плейлиста
 #[tauri::command]
 pub fn remove_track_from_playlist(
     database: State<'_, Database>,
@@ -76,17 +84,23 @@ pub fn delete_playlist(
     database: State<'_, Database>,
     playlist_id: String,
 ) -> Result<Vec<Playlist>, String> {
+    // Защита от редактирования текущего ремикса
     if playlist_id == FAVORITES_PLAYLIST_ID || playlist_id == REMIXES_PLAYLIST_ID {
         return Err("Системный плейлист нельзя удалить".to_string());
     }
+
     let connection = database
         .connection
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
     playlists::delete(&connection, &playlist_id)?;
+
     let cover_paths = covers::remove_entity(&connection, CoverKind::Playlist, &playlist_id)?;
+
+    // Удаление из недавно прослушанных
     recently_played::remove_entity(&connection, RecentItemKind::Playlist, &playlist_id)?;
     drop(connection);
+
     for path in cover_paths {
         let _ = std::fs::remove_file(path);
     }

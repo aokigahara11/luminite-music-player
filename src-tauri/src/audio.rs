@@ -10,18 +10,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    commands::tracks::import_generated_track,
-    database::{core::Database, playlists, tracks},
-    models::{Track, REMIXES_PLAYLIST_ID},
-};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
-use uuid::Uuid;
+use tauri::{AppHandle, Emitter};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+
+/// Состояние аудио
 pub struct AudioStatus {
     position_secs: f64,
     duration_secs: f64,
@@ -32,6 +28,7 @@ pub struct AudioStatus {
     ended: bool,
 }
 
+/// Аудио команды
 enum AudioCommand {
     Play {
         path: PathBuf,
@@ -62,7 +59,7 @@ enum AudioCommand {
 }
 
 impl AudioCommand {
-    // Возвращает канал, через который вызывающая команда получит результат.
+    /// Возвращает канал, через который вызывающая команда получит результат.
     fn reply(&self) -> &SyncSender<Result<AudioStatus, String>> {
         match self {
             Self::Play { reply, .. }
@@ -82,7 +79,7 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    // Запускает отдельный поток для обработки аудиокоманд.
+    /// Запускает отдельный поток для обработки аудиокоманд, изолируя их от основого потока приложения
     pub fn new(app: AppHandle) -> Result<Self, String> {
         let (sender, receiver) = mpsc::channel();
         thread::Builder::new()
@@ -92,7 +89,8 @@ impl AudioEngine {
         Ok(Self { sender })
     }
 
-    // Передаёт команду аудиопотоку и ожидает обновлённое состояние плеера.
+    /// Передаёт команду аудиопотоку и ожидает обновлённое состояние плеера,
+    /// до тех пор, пока процесс не выполнит её и не вернет актуальный статус плеера
     fn request(
         &self,
         create_command: impl FnOnce(SyncSender<Result<AudioStatus, String>>) -> AudioCommand,
@@ -105,10 +103,68 @@ impl AudioEngine {
             .recv()
             .map_err(|error| format!("Не удалось получить состояние аудио: {error}"))?
     }
+
+    pub(crate) fn play(
+        &self,
+        path: String,
+        position_secs: f64,
+        should_play: bool,
+        volume: f64,
+    ) -> Result<AudioStatus, String> {
+        self.request(|reply| AudioCommand::Play {
+            path: PathBuf::from(path),
+            position_secs,
+            should_play,
+            volume,
+            reply,
+        })
+    }
+
+    pub(crate) fn pause(&self) -> Result<AudioStatus, String> {
+        self.request(AudioCommand::Pause)
+    }
+
+    pub(crate) fn resume(&self) -> Result<AudioStatus, String> {
+        self.request(AudioCommand::Resume)
+    }
+
+    pub(crate) fn stop(&self) -> Result<AudioStatus, String> {
+        self.request(AudioCommand::Stop)
+    }
+
+    pub(crate) fn seek(&self, position_secs: f64) -> Result<AudioStatus, String> {
+        self.request(|reply| AudioCommand::Seek {
+            position_secs,
+            reply,
+        })
+    }
+
+    pub(crate) fn set_volume(&self, volume: f64) -> Result<AudioStatus, String> {
+        self.request(|reply| AudioCommand::SetVolume { volume, reply })
+    }
+
+    pub(crate) fn set_equalizer(&self, gains: [f32; 6]) -> Result<AudioStatus, String> {
+        if gains.iter().any(|gain| !gain.is_finite()) {
+            return Err("Значения эквалайзера должны быть конечными числами".to_string());
+        }
+        self.request(|reply| AudioCommand::SetEqualizer { gains, reply })
+    }
+
+    pub(crate) fn set_transition_duration(
+        &self,
+        duration_secs: f64,
+    ) -> Result<AudioStatus, String> {
+        self.request(|reply| AudioCommand::SetTransitionDuration {
+            duration_secs,
+            reply,
+        })
+    }
 }
 
+// Константы частот
 const EQUALIZER_FREQUENCIES: [f32; 6] = [60.0, 150.0, 400.0, 1_000.0, 2_400.0, 15_000.0];
 
+/// Структура для данных эквалайзера
 struct EqualizerSource<S> {
     input: S,
     gains: Arc<[AtomicU32; 6]>,
@@ -121,13 +177,12 @@ where
     S: Source<Item = f32>,
 {
     fn new(input: S, gains: Arc<[AtomicU32; 6]>) -> Self {
+        // Узнаем количество аудиоканалов, минимум 1 для избежания паники
         let channels = input.channels().max(1) as usize;
         Self {
             input,
             gains,
-            filters: (0..channels)
-                .map(|_| std::array::from_fn(|_| Biquad::default()))
-                .collect(),
+            filters: (0..channels).map(|_| std::array::from_fn(|_| Biquad::default())).collect(),
             channel_index: 0,
         }
     }
@@ -139,6 +194,7 @@ where
 {
     type Item = f32;
 
+    /// Возвращает следующий обработанный эквалайзером семпл аудио.
     fn next(&mut self) -> Option<Self::Item> {
         let mut sample = self.input.next()?;
         let channel = self.channel_index;
@@ -146,11 +202,14 @@ where
         let sample_rate = self.input.sample_rate() as f32;
         let filters = &mut self.filters[channel];
 
+        // Прогоняем файл через возможные фильтры
         for (index, filter) in filters.iter_mut().enumerate() {
             let gain = f32::from_bits(self.gains[index].load(Ordering::Relaxed)).clamp(-12.0, 12.0);
             if filter.gain_db != gain {
                 filter.configure(EQUALIZER_FREQUENCIES[index], gain, sample_rate);
             }
+
+            // Применяем фильтр
             sample = filter.process(sample);
         }
         Some(sample)
@@ -160,23 +219,28 @@ where
 impl<S> Source for EqualizerSource<S>
 where
     S: Source<Item = f32>,
-{
+{   
+    /// Возвраащает длину текущего фрейма из оригинального аудиопотока
     fn current_frame_len(&self) -> Option<usize> {
         self.input.current_frame_len()
     }
 
+    /// Передает количество аудиоканалов
     fn channels(&self) -> u16 {
         self.input.channels()
     }
 
+    /// Возвращает частоту дискретизации
     fn sample_rate(&self) -> u32 {
         self.input.sample_rate()
     }
 
+    /// Возращает общую длительность трека 
     fn total_duration(&self) -> Option<Duration> {
         self.input.total_duration()
     }
 
+    /// Переопределение метода перемотки
     fn try_seek(&mut self, position: Duration) -> Result<(), rodio::source::SeekError> {
         self.input.try_seek(position)?;
         for filters in &mut self.filters {
@@ -189,6 +253,9 @@ where
     }
 }
 
+/// Цифровой фильтр второго порядка (Biquad) для обработки аудио-семплов.
+/// Хранит математические коэффициенты, историю предыдущих значений (память фильтра) 
+/// и текущее значение усиления в децибелах.
 #[derive(Clone, Copy)]
 struct Biquad {
     b0: f32,
@@ -203,6 +270,7 @@ struct Biquad {
     gain_db: f32,
 }
 
+/// Дефолтные настройки
 impl Default for Biquad {
     fn default() -> Self {
         Self {
@@ -221,6 +289,7 @@ impl Default for Biquad {
 }
 
 impl Biquad {
+    /// Настраивает математические коэффициенты фильтра под конкретную частоту и уровень усиления
     fn configure(&mut self, frequency: f32, gain_db: f32, sample_rate: f32) {
         let frequency = frequency.min(sample_rate * 0.45);
         let omega = 2.0 * std::f32::consts::PI * frequency / sample_rate;
@@ -236,6 +305,7 @@ impl Biquad {
         self.gain_db = gain_db;
     }
 
+    /// Применяет фильтр к одному входному аудио-семплу, возвращая модифицированный семпл
     fn process(&mut self, input: f32) -> f32 {
         let output = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
             - self.a1 * self.y1
@@ -247,6 +317,7 @@ impl Biquad {
         output
     }
 
+    /// Сбрасывает историю памяти фильтра
     fn reset(&mut self) {
         self.x1 = 0.0;
         self.x2 = 0.0;
@@ -255,6 +326,7 @@ impl Biquad {
     }
 }
 
+/// Состояния для главного рабочего обьекта
 struct AudioWorker {
     app: AppHandle,
     _output_stream: Option<OutputStream>,
@@ -272,8 +344,10 @@ struct AudioWorker {
     end_when_empty: bool,
 }
 
+/// Управление состояниеми рабочего обьекта
 impl AudioWorker {
-    // Собирает текущее состояние аудиопотока для интерфейса.
+    
+    // Собирает текущее состояние аудиопотока для интерфейса
     fn status(&self, ended: bool) -> AudioStatus {
         let sink = self.sink.as_ref();
         let is_playing = sink.is_some_and(|sink| !sink.is_paused() && !sink.empty());
@@ -301,7 +375,7 @@ impl AudioWorker {
         }
     }
 
-    // Выполняет одну команду управления воспроизведением.
+    // Выполняет одну команду управления воспроизведением
     fn process(&mut self, command: AudioCommand) -> Result<AudioStatus, String> {
         match command {
             AudioCommand::Play {
@@ -311,6 +385,7 @@ impl AudioWorker {
                 volume,
                 ..
             } => self.load_track(path, position_secs, should_play, volume)?,
+            
             AudioCommand::Pause(_) => {
                 self.finish_transition();
                 if let Some(sink) = &self.sink {
@@ -318,6 +393,7 @@ impl AudioWorker {
                 }
                 self.end_when_empty = false;
             }
+            
             AudioCommand::Resume(_) => {
                 if self.sink.as_ref().is_some_and(Sink::empty) {
                     if let Some(path) = self.track_path.clone() {
@@ -328,6 +404,7 @@ impl AudioWorker {
                     self.end_when_empty = true;
                 }
             }
+            
             AudioCommand::Stop(_) => {
                 self.finish_transition();
                 if let Some(sink) = self.sink.take() {
@@ -339,6 +416,7 @@ impl AudioWorker {
                 self.end_when_empty = false;
                 self.track_path = None;
             }
+            
             AudioCommand::Seek { position_secs, .. } => {
                 if self.sink.as_ref().is_some_and(Sink::empty) {
                     if let Some(path) = self.track_path.clone() {
@@ -361,6 +439,7 @@ impl AudioWorker {
                     self.end_when_empty = !sink.is_paused();
                 }
             }
+           
             AudioCommand::SetVolume { volume, .. } => {
                 self.volume = if volume.is_finite() {
                     volume.clamp(0.0, 1.0)
@@ -372,11 +451,13 @@ impl AudioWorker {
                 }
                 self.update_transition();
             }
+            
             AudioCommand::SetEqualizer { gains, .. } => {
                 for (stored, gain) in self.equalizer_gains.iter().zip(gains) {
                     stored.store(gain.clamp(-12.0, 12.0).to_bits(), Ordering::Relaxed);
                 }
             }
+            
             AudioCommand::SetTransitionDuration { duration_secs, .. } => {
                 self.transition_duration = if duration_secs.is_finite() {
                     duration_secs.clamp(0.0, 8.0)
@@ -402,12 +483,15 @@ impl AudioWorker {
     ) -> Result<(), String> {
         let file =
             File::open(&path).map_err(|error| format!("Не удалось открыть аудиофайл: {error}"))?;
+        
         let decoder = Decoder::new(file)
             .map_err(|error| format!("Не удалось декодировать аудио: {error}"))?;
+        
         let duration_secs = decoder
             .total_duration()
             .map(|duration| duration.as_secs_f64())
             .unwrap_or_default();
+        
         let volume = if volume.is_finite() {
             volume.clamp(0.0, 1.0)
         } else {
@@ -425,6 +509,7 @@ impl AudioWorker {
             .output_handle
             .as_ref()
             .ok_or_else(|| "Аудиоустройство не инициализировано".to_string())?;
+        
         let sink = Sink::try_new(output_handle)
             .map_err(|error| format!("Не удалось создать аудиопоток: {error}"))?;
         sink.set_volume(0.0);
@@ -438,25 +523,25 @@ impl AudioWorker {
         } else {
             0.0
         };
+
         let position = if duration_secs > 0.0 {
             position.min(duration_secs)
         } else {
             position
         };
+
         if position > 0.0 {
             sink.try_seek(Duration::from_secs_f64(position))
                 .map_err(|error| format!("Не удалось изменить позицию аудио: {error}"))?;
         }
+
         if !should_play {
             sink.pause();
         }
+
         self.finish_transition();
         if let Some(previous_sink) = self.sink.take() {
-            if should_play
-                && !previous_sink.is_paused()
-                && !previous_sink.empty()
-                && self.transition_duration > 0.0
-            {
+            if should_play && !previous_sink.is_paused() && !previous_sink.empty() && self.transition_duration > 0.0 {
                 previous_sink.set_volume(volume as f32);
                 sink.set_volume(0.0);
                 self.transition_sink = Some(previous_sink);
@@ -465,6 +550,7 @@ impl AudioWorker {
                 previous_sink.stop();
                 sink.set_volume(volume as f32);
             }
+
         } else {
             sink.set_volume(volume as f32);
         }
@@ -478,6 +564,7 @@ impl AudioWorker {
         Ok(())
     }
 
+    /// Обновление перехода
     fn update_transition(&mut self) {
         let (Some(started), Some(previous_sink)) =
             (self.transition_started, self.transition_sink.as_ref())
@@ -494,6 +581,7 @@ impl AudioWorker {
         }
     }
 
+    /// Завершение перехода
     fn finish_transition(&mut self) {
         if let Some(previous_sink) = self.transition_sink.take() {
             previous_sink.stop();
@@ -541,6 +629,8 @@ fn run_worker(receiver: Receiver<AudioCommand>, app: AppHandle) {
     };
     let mut last_status_emit = Instant::now();
 
+    // Обрабатывает команды управления звуком последовательно, управляет кроссфейдом 
+    // и периодически отправляет актуальный статус плеера в интерфейс приложения.
     loop {
         match receiver.recv_timeout(Duration::from_millis(20)) {
             Ok(command) => {
@@ -555,6 +645,7 @@ fn run_worker(receiver: Receiver<AudioCommand>, app: AppHandle) {
                 worker.emit_status();
                 last_status_emit = Instant::now();
             }
+            
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 worker.update_transition();
                 if last_status_emit.elapsed() >= Duration::from_millis(200) {
@@ -564,104 +655,6 @@ fn run_worker(receiver: Receiver<AudioCommand>, app: AppHandle) {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-    }
-}
-
-// Загружает и воспроизводит аудиофайл с указанной позиции и громкостью.
-#[tauri::command]
-pub fn play_audio(
-    engine: State<'_, AudioEngine>,
-    path: String,
-    position_secs: f64,
-    should_play: bool,
-    volume: f64,
-) -> Result<AudioStatus, String> {
-    engine.request(|reply| AudioCommand::Play {
-        path: PathBuf::from(path),
-        position_secs,
-        should_play,
-        volume,
-        reply,
-    })
-}
-
-// Приостанавливает текущий трек.
-#[tauri::command]
-pub fn pause_audio(engine: State<'_, AudioEngine>) -> Result<AudioStatus, String> {
-    engine.request(AudioCommand::Pause)
-}
-
-// Возобновляет воспроизведение; завершённый трек запускает сначала.
-#[tauri::command]
-pub fn resume_audio(engine: State<'_, AudioEngine>) -> Result<AudioStatus, String> {
-    engine.request(AudioCommand::Resume)
-}
-
-// Останавливает воспроизведение и освобождает текущий трек.
-#[tauri::command]
-pub fn stop_audio(engine: State<'_, AudioEngine>) -> Result<AudioStatus, String> {
-    engine.request(AudioCommand::Stop)
-}
-
-// Перемещает воспроизведение к указанной позиции в секундах.
-#[tauri::command]
-pub fn seek_audio(
-    engine: State<'_, AudioEngine>,
-    position_secs: f64,
-) -> Result<AudioStatus, String> {
-    engine.request(|reply| AudioCommand::Seek {
-        position_secs,
-        reply,
-    })
-}
-
-// Устанавливает громкость в диапазоне от 0.0 до 1.0.
-#[tauri::command]
-pub fn set_audio_volume(
-    engine: State<'_, AudioEngine>,
-    volume: f64,
-) -> Result<AudioStatus, String> {
-    engine.request(|reply| AudioCommand::SetVolume { volume, reply })
-}
-
-// Устанваливает эквалайзер
-#[tauri::command]
-pub fn set_equalizer(
-    engine: State<'_, AudioEngine>,
-    gains: [f32; 6],
-) -> Result<AudioStatus, String> {
-    if gains.iter().any(|gain| !gain.is_finite()) {
-        return Err("Значения эквалайзера должны быть конечными числами".to_string());
-    }
-    engine.request(|reply| AudioCommand::SetEqualizer { gains, reply })
-}
-
-#[tauri::command]
-pub fn set_transition_duration(
-    engine: State<'_, AudioEngine>,
-    duration_secs: f64,
-) -> Result<AudioStatus, String> {
-    engine.request(|reply| AudioCommand::SetTransitionDuration {
-        duration_secs,
-        reply,
-    })
-}
-
-#[cfg(test)]
-mod equalizer_tests {
-    use super::Biquad;
-
-    #[test]
-    fn zero_gain_is_transparent_and_positive_gain_boosts() {
-        let mut flat = Biquad::default();
-        flat.configure(1_000.0, 0.0, 48_000.0);
-        for sample in [-0.5, 0.25, 0.75, -0.125] {
-            assert!((flat.process(sample) - sample).abs() < 0.00001);
-        }
-
-        let mut boosted = Biquad::default();
-        boosted.configure(1_000.0, 6.0, 48_000.0);
-        assert!(boosted.process(1.0) > 1.0);
     }
 }
 
@@ -701,7 +694,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let sample = self.input.next()?;
         if self.channels == 2 {
-            // Обновляем угол один раз за стереофрейм (при обработке левого канала)
+            // Обновляем угол один раз за стереофрейм
             if self.channel_index == 0 {
                 self.angle += (2.0 * std::f32::consts::PI * self.rate) / self.sample_rate as f32;
                 if self.angle >= 2.0 * std::f32::consts::PI {
@@ -709,8 +702,8 @@ where
                 }
             }
 
-            // Плавное панорамирование постоянной мощности (Constant-Power Panning)
-            let pan_pos = self.angle.sin(); // от -1.0 до 1.0
+            // Плавное панорамирование постоянной мощности
+            let pan_pos = self.angle.sin();
             let theta = (pan_pos + 1.0) * 0.25 * std::f32::consts::PI;
             let gain = if self.channel_index == 0 {
                 theta.cos() * std::f32::consts::SQRT_2
@@ -756,6 +749,7 @@ struct Echo<I> {
     channels: u16,
 }
 
+/// 
 impl<I> Echo<I>
 where
     I: Source<Item = f32>,
@@ -831,7 +825,7 @@ where
 }
 
 // Рендер ремикса
-fn render_remix(
+pub(crate) fn render_remix(
     file_path: &Path,
     track_title: &str,
     output_dir: &Path,
@@ -955,91 +949,4 @@ fn render_remix(
     }
 
     Ok(output_path)
-}
-
-// Создание и рендер ремикса
-#[tauri::command]
-pub fn create_and_render_remix(
-    database: State<'_, Database>,
-    file_path: String,
-    track_title: String,
-    track_artist: String,
-    speed_type: String,
-    effects: Vec<String>,
-) -> Result<Track, String> {
-    let output_dir = database
-        .app_dir
-        .join("remix-temp")
-        .join(Uuid::new_v4().to_string());
-    let remix_path = match render_remix(
-        Path::new(&file_path),
-        &track_title,
-        &output_dir,
-        &speed_type,
-        &effects,
-    ) {
-        Ok(path) => path,
-        Err(error) => {
-            let render_error = format!("Не удалось создать ремикс: {error}");
-            if !output_dir.exists() {
-                return Err(render_error);
-            }
-            return match std::fs::remove_dir(&output_dir) {
-                Ok(()) => Err(render_error),
-                Err(cleanup_error) => Err(format!(
-                    "{render_error}. Не удалось удалить временную папку: {cleanup_error}"
-                )),
-            };
-        }
-    };
-
-    match import_generated_track(&database, &remix_path, &track_artist) {
-        Ok(track) => {
-            let playlist_result = database
-                .connection
-                .lock()
-                .map_err(|_| "Соединение с базой данных недоступно".to_string())
-                .and_then(|connection| {
-                    playlists::ensure_remixes(&connection)?;
-                    playlists::add_track(&connection, REMIXES_PLAYLIST_ID, &track.id)
-                });
-            if let Err(error) = playlist_result {
-                let mut cleanup_errors = Vec::new();
-                match database.connection.lock() {
-                    Ok(connection) => {
-                        if let Err(cleanup_error) = tracks::delete(&connection, &track.id) {
-                            cleanup_errors.push(format!(
-                                "не удалось удалить запись трека: {cleanup_error}"
-                            ));
-                        }
-                    }
-                    Err(_) => cleanup_errors
-                        .push("соединение с базой данных недоступно для очистки".to_string()),
-                }
-                if let Err(cleanup_error) = std::fs::remove_file(&track.path) {
-                    if std::path::Path::new(&track.path).exists() {
-                        cleanup_errors.push(format!("не удалось удалить файл трека: {cleanup_error}"));
-                    }
-                }
-                let cleanup_details = if cleanup_errors.is_empty() {
-                    String::new()
-                } else {
-                    format!(" Ошибки очистки: {}", cleanup_errors.join("; "))
-                };
-                return Err(format!(
-                    "Не удалось сохранить ремикс в плейлисте «Ремиксы»: {error}.{cleanup_details}"
-                ));
-            }
-            if let Err(error) = std::fs::remove_dir(&output_dir) {
-                eprintln!("Не удалось удалить временную папку ремикса: {error}");
-            }
-            Ok(track)
-        }
-        Err(error) => match std::fs::remove_dir(&output_dir) {
-            Ok(()) => Err(format!("Не удалось добавить ремикс в медиатеку: {error}")),
-            Err(cleanup_error) => Err(format!(
-                "Не удалось добавить ремикс в медиатеку: {error}. Также не удалось удалить временную папку: {cleanup_error}"
-            )),
-        },
-    }
 }

@@ -9,6 +9,7 @@ use crate::{
     models::{Cover, CoverKind, FAVORITES_PLAYLIST_ID, REMIXES_PLAYLIST_ID},
 };
 
+/// Получить все обложки
 #[tauri::command]
 pub fn get_covers(database: State<'_, Database>) -> Result<Vec<Cover>, String> {
     let connection = database
@@ -18,6 +19,7 @@ pub fn get_covers(database: State<'_, Database>) -> Result<Vec<Cover>, String> {
     covers::all(&connection)
 }
 
+/// Поставить обложку
 #[tauri::command]
 pub fn set_cover(
     database: State<'_, Database>,
@@ -30,10 +32,13 @@ pub fn set_cover(
     {
         return Err("Обложку системного плейлиста нельзя изменить".to_string());
     }
+
     let source_path = PathBuf::from(file_path);
+
     if !source_path.is_file() {
         return Err("Файл обложки не найден".to_string());
     }
+
     let extension = source_path
         .extension()
         .and_then(|value| value.to_str())
@@ -45,12 +50,14 @@ pub fn set_cover(
         .connection
         .lock()
         .map_err(|_| "Соединение с базой данных недоступно".to_string())?;
+
     let exists = match kind {
         CoverKind::Track => tracks::get(&connection, &entity_id)?.is_some(),
         CoverKind::Playlist => playlists::all(&connection)?
             .iter()
             .any(|playlist| playlist.id == entity_id),
     };
+
     if !exists {
         return Err("Объект для обложки не найден".to_string());
     }
@@ -65,8 +72,10 @@ pub fn set_cover(
             .to_string_lossy()
             .to_string(),
     };
+
     fs::copy(&source_path, &cover.path_file)
         .map_err(|error| format!("Ошибка копирования обложки: {error}"))?;
+
     match covers::set(&connection, &cover) {
         Ok(old_path) => {
             drop(connection);
@@ -75,6 +84,7 @@ pub fn set_cover(
             }
             Ok(cover)
         }
+
         Err(error) => {
             let _ = fs::remove_file(&cover.path_file);
             Err(error)

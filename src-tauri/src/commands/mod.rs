@@ -1,4 +1,6 @@
+pub mod audio;
 pub mod covers;
+pub mod data;
 pub mod downloader;
 pub mod playback;
 pub mod player_config;

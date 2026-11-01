@@ -58,7 +58,7 @@ export const api = {
     addTrackToPlaylist: (playlistId: string, trackId: string) =>
         invoke<void>("add_track_to_playlist", { playlistId, trackId }),
     recordRecentlyPlayed: (kind: RecentItemKind, entityId: string) =>
-        invoke<RecentEntry[]>("record_recently_played", { kind, entityId }),
+        invoke<RecentEntry[]>("add_recently_played", { kind, entityId }),
     editTrack: (id: string, title: string, artist: string) =>
         invoke<StoredTrack>("edit_metadata_track", { id, title, artist }),
     getNextTrackId: (options: {
