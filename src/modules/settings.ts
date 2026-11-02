@@ -14,6 +14,18 @@ import { updatePlayButtonIcon, updateProgressDisplay } from "./playerbar";
 import { recentSaveQueue } from "./recentlyPlayed";
 
 const AUDIO_SETTINGS_STORAGE_KEY = "luminite-audio-settings";
+const THEME_STORAGE_KEY = "luminite-theme";
+const THEMES = [
+    "theme-purple",
+    "theme-emerald",
+    "theme-red",
+    "theme-blue",
+    "theme-orange",
+    "theme-pink",
+    "theme-yellow",
+] as const;
+const DEFAULT_THEME = THEMES[0];
+const THEME_CLASSES = new Set<string>(THEMES);
 const EQUALIZER_FREQUENCIES = [60, 150, 400, 1_000, 2_400, 15_000];
 const LEGACY_EQUALIZER_FREQUENCIES = [60, 250, 1_000, 4_000, 12_000];
 
@@ -109,6 +121,12 @@ export function applyTransitionDuration(): void {
 
 // Настройка событий для элементов настроек
 export function setupSettingsEvents(): void {
+    elements.themeRadios.forEach((radio) => {
+        radio.addEventListener("change", () => {
+            if (radio.checked) changeTheme(radio.value);
+        });
+    });
+
     elements.equalizerPreset?.addEventListener("change", () => {
         const preset = EQUALIZER_PRESETS[elements.equalizerPreset.value];
         if (!preset) return;
@@ -141,6 +159,31 @@ export function setupSettingsEvents(): void {
         saveAudioSettings();
         applyTransitionDuration();
     });
+}
+
+function applyTheme(theme: string): void {
+    document.documentElement.classList.remove(...THEMES);
+    document.documentElement.classList.add(theme);
+    elements.themeRadios.forEach((radio) => {
+        radio.checked = radio.value === theme;
+    });
+}
+
+export function loadThemeSettings(): void {
+    let theme: string = DEFAULT_THEME;
+    try {
+        const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+        if (storedTheme && THEME_CLASSES.has(storedTheme)) {
+            theme = storedTheme;
+        } else if (storedTheme) {
+            console.warn("Сохранена неизвестная тема оформления:", storedTheme);
+        }
+    } catch (error) {
+        console.error("Не удалось загрузить тему оформления:", error);
+        showToast("Не удалось загрузить тему оформления", true);
+    }
+
+    applyTheme(theme);
 }
 
 // Загрузка настроек звука из локального хранилища и применение их к аудио
@@ -221,6 +264,14 @@ export async function deleteAllAppData() {
             localSettingsError = error;
             console.error("Не удалось удалить локальные настройки звука:", error);
         }
+        try {
+            localStorage.removeItem(THEME_STORAGE_KEY);
+        } catch (error) {
+            localSettingsError ??= error;
+            console.error("Не удалось удалить сохраненную тему оформления:", error);
+        } finally {
+            applyTheme(DEFAULT_THEME);
+        }
         await Promise.all([
             api.setAudioVolume(0.7),
             api.setEqualizer(audioSettings.equalizer),
@@ -266,5 +317,20 @@ export async function deleteAllAppData() {
     }
     finally {
         dataElements.confirmDeleteDataBtn.disabled = false;
+    }
+}
+
+export function changeTheme(theme: string): void {
+    if (!THEME_CLASSES.has(theme)) {
+        console.error("Неизвестная тема оформления:", theme);
+        return;
+    }
+
+    applyTheme(theme);
+    try {
+        localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (error) {
+        console.error("Не удалось сохранить тему оформления:", error);
+        showToast("Не удалось сохранить тему оформления", true);
     }
 }

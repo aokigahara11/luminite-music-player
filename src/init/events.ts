@@ -18,7 +18,7 @@ import { clearPendingPlaylistTrack, openAddToPlaylistModal, openCreatePlaylistMo
 import { renderRecentlyPlayed } from "../modules/recentlyPlayed";
 import { closeRemixModals, createRemix, openRemixSettings, openRemixSpeedModal } from "../modules/remix";
 import { setupSearch } from "../modules/search";
-import { deleteAllAppData, loadAudioSettings, setupSettingsEvents } from "../modules/settings";
+import { deleteAllAppData, loadAudioSettings, loadThemeSettings, setupSettingsEvents } from "../modules/settings";
 import { addTrackHandler, toggleFavorite } from "../modules/tracks";
 import { state } from "../state";
 import type { AudioStatus } from "../types";
@@ -57,6 +57,7 @@ export async function initEvents() {
         console.error("Не удалось подписаться на состояние аудио:", error);
         showToast("Не удалось подключить управление аудио", true);
     }
+    loadThemeSettings();
     await loadAudioSettings();
     window.addEventListener("resize", updateTrackTextMarquee);
     const closeMobileTrackPanel = () => {
