@@ -12,6 +12,7 @@ import { loadSavedData } from "./library";
 import { resetListenProgress, updateFavoriteButton } from "./sidebar";
 import { updatePlayButtonIcon, updateProgressDisplay } from "./playerbar";
 import { recentSaveQueue } from "./recentlyPlayed";
+import { applyThemeCovers } from "./covers";
 
 const AUDIO_SETTINGS_STORAGE_KEY = "luminite-audio-settings";
 const THEME_STORAGE_KEY = "luminite-theme";
@@ -164,6 +165,7 @@ export function setupSettingsEvents(): void {
 function applyTheme(theme: string): void {
     document.documentElement.classList.remove(...THEMES);
     document.documentElement.classList.add(theme);
+    applyThemeCovers(theme);
     elements.themeRadios.forEach((radio) => {
         radio.checked = radio.value === theme;
     });
