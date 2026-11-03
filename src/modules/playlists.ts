@@ -6,7 +6,7 @@ import { elements } from "../elements/home";
 import { elements as playlistsElements } from "../elements/playlists";
 import { mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
-import { FAVORITES_COVER, REMIXES_COVER } from "../assets";
+import { getThemedPlaylistCover } from "../assets";
 import type { PlaylistCategory, Track } from "../types";
 import { showToast } from "../utils/toast";
 import { reloadTrackAudio, updateTrackMetadata } from "./sidebar";
@@ -127,24 +127,21 @@ export function renderPlaylists() {
     else {
         playlistsElements.playlistsEmptyState?.classList.add("hidden");
         playlistsElements.playlistsGrid.innerHTML = state.playlists
-            .map((pl) => `
+            .map((pl) => {
+        const cover = getThemedPlaylistCover(pl.id) || pl.cover;
+        return `
       <div class="media-card" data-playlist-id="${pl.id}">
         <div class="card-cover-wrapper">
                     <div class="card-cover playlist-cover" style="background:#282828; display:flex; align-items:center; justify-content:center;">
-                        ${pl.cover
-            ? `<img src="${pl.cover}" alt="Обложка: ${pl.title}" />`
-            : pl.id === FAVORITES_PLAYLIST_ID
-                ? `<img src="${FAVORITES_COVER}" alt="Обложка: ${pl.title}" />`
-                : pl.id === REMIXES_PLAYLIST_ID
-                    ? `<img src="${REMIXES_COVER}" alt="Обложка: ${pl.title}" />`
-                    : "🎵"}
+                        ${cover ? `<img src="${cover}" alt="Обложка: ${pl.title}" />` : "🎵"}
                     </div>
         </div>
         <div class="card-title">${pl.title}</div>
         <div class="playlist-category-label">${pl.category}</div>
         <div class="card-artist">${pl.trackIds.length} треков</div>
       </div>
-    `)
+    `;
+    })
             .join("");
         playlistsElements.playlistsGrid.querySelectorAll<HTMLElement>(".media-card").forEach((card) => {
             card.setAttribute("role", "button");
@@ -205,9 +202,9 @@ export function renderAddToPlaylistOptions() {
     playlistsElements.modalPlaylistsList.classList.toggle("hidden", matchingPlaylists.length === 0);
     playlistsElements.modalPlaylistsList.innerHTML = matchingPlaylists
         .map((playlist) => {
-        const cover = playlist.cover
-            || (playlist.id === FAVORITES_PLAYLIST_ID ? FAVORITES_COVER : "")
-            || (playlist.id === REMIXES_PLAYLIST_ID ? REMIXES_COVER : "");
+        const cover = getThemedPlaylistCover(playlist.id)
+            || playlist.cover
+            || "";
         return `
                 <button class="modal-playlist-item modal-pl-item" type="button" data-id="${playlist.id}">
                     <span class="modal-playlist-cover">
