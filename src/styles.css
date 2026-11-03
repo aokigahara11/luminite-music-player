@@ -892,6 +892,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+
 .sidebar-action-button,
 .sidebar-edit-cancel {
   background: var(--bg-elevated-2);
@@ -990,8 +991,8 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 .sidebar-edit-save:hover {
-  background: #3a2a52;
-  border-color: rgba(192, 132, 252, 0.6);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
 .sidebar-edit-save:disabled {
@@ -1343,7 +1344,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   width: fit-content;
   padding: 10px 16px;
   color: #fff;
-  background: var(--bg-elevated-2);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
@@ -1354,11 +1355,8 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 .download-submit-button:hover:not(:disabled) {
-  background: var(--bg-elevated-2);
+  background: var(--accent-soft);
   border-color: var(--accent-border);
-  border: 0.5px solid var(--accent-border);
-  transform: translateY(-1px);
-  box-shadow: 0 0 0 1px var(--accent-border), 0 8px 28px var(--accent-glow);
 }
 
 .download-submit-button:disabled {
