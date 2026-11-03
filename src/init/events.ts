@@ -9,6 +9,7 @@ import { elements as navigationElements } from "../elements/navigation";
 import { elements as playerbarElements } from "../elements/playerbar";
 import { elements as playlistsElements } from "../elements/playlists";
 import { elements as remixElements } from "../elements/remix";
+import { elements as settingsElements } from "../elements/settings";
 import { elements as sidebarElements } from "../elements/sidebar";
 import { changeCover } from "../modules/covers";
 import { handleDownload } from "../modules/downloader";
@@ -36,8 +37,12 @@ export async function initEvents() {
     try {
         await listen<AudioStatus>("audio-state", ({ payload }) => {
             const wasPlaying = state.isPlaying;
+            const volumeChanged = player.audioStatus.volume !== payload.volume;
             player.audioStatus = payload;
             state.isPlaying = payload.isPlaying;
+            playerbarElements.volumeSlider.value = Math.round(payload.volume * 100).toString();
+            if (volumeChanged && player.configLoaded)
+                savePlayerConfig();
             const audioTrack = state.tracks.find((track) => track.path === payload.trackPath);
             updateTrackListenProgress(audioTrack, payload);
             if (audioTrack && payload.durationSecs > 0)
@@ -57,6 +62,36 @@ export async function initEvents() {
         console.error("Не удалось подписаться на состояние аудио:", error);
         showToast("Не удалось подключить управление аудио", true);
     }
+    
+    try {
+        await listen<string>("player-shortcut-action", ({ payload }) => {
+            switch (payload) {
+                case "play-pause":
+                    void togglePlay();
+                    break;
+                case "next-track":
+                    void playNextTrack();
+                    break;
+                case "previous-track":
+                    playPrevTrack();
+                    break;
+                case "toggle-shuffle":
+                    toggleShuffle();
+                    break;
+                case "toggle-repeat":
+                    toggleRepeatMode();
+                    break;
+                default:
+                    console.error(`Получено неизвестное действие горячей клавиши: ${payload}`);
+            }
+        });
+    }
+    
+    catch (error) {
+        console.error("Не удалось подписаться на горячие клавиши:", error);
+        showToast("Не удалось подключить горячие клавиши", true);
+    }
+    
     loadThemeSettings();
     await loadAudioSettings();
     window.addEventListener("resize", updateTrackTextMarquee);
@@ -338,6 +373,26 @@ export async function initEvents() {
         });
     });
     setupSettingsEvents();
+
+    const closeShortcutsModal = () => {
+        closeModal(settingsElements.shortcutsModal);
+        settingsElements.openShortcutBtn.focus();
+    };
+
+    settingsElements.openShortcutBtn?.addEventListener("click", () => {
+        openModal(settingsElements.shortcutsModal);
+        settingsElements.closeShortcutsModalBtn.focus();
+    });
+
+    settingsElements.closeShortcutsModalBtn?.addEventListener("click", closeShortcutsModal);
+    settingsElements.shortcutsModal?.addEventListener("click", (event) => {
+        if (event.target === settingsElements.shortcutsModal)
+            closeShortcutsModal();
+    });
+    settingsElements.shortcutsModal?.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape")
+            closeShortcutsModal();
+    });
 
     dataElements.openDeleteDataModalBtn?.addEventListener("click", () => {
         openModal(dataElements.deleteDataModal);

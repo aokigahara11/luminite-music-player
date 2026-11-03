@@ -2,6 +2,7 @@ pub mod audio;
 pub mod commands;
 pub mod database;
 pub mod models;
+pub mod shortcuts;
 
 use database::core::Database;
 use tauri::Manager;
@@ -12,6 +13,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(shortcuts::handle_shortcut_event)
+                .build(),
+        )
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             let database = Database::open(app_dir).map_err(std::io::Error::other)?;
@@ -20,6 +26,7 @@ pub fn run() {
             let audio_engine =
                 audio::AudioEngine::new(app.handle().clone()).map_err(std::io::Error::other)?;
             app.manage(audio_engine);
+            shortcuts::register_shortcuts(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -48,6 +48,10 @@ enum AudioCommand {
         volume: f64,
         reply: SyncSender<Result<AudioStatus, String>>,
     },
+    AdjustVolumeBy {
+        delta: f64,
+        reply: SyncSender<Result<AudioStatus, String>>,
+    },
     SetEqualizer {
         gains: [f32; 6],
         reply: SyncSender<Result<AudioStatus, String>>,
@@ -68,6 +72,7 @@ impl AudioCommand {
             | Self::Stop(reply)
             | Self::Seek { reply, .. }
             | Self::SetVolume { reply, .. }
+            | Self::AdjustVolumeBy { reply, .. }
             | Self::SetEqualizer { reply, .. }
             | Self::SetTransitionDuration { reply, .. } => reply,
         }
@@ -141,6 +146,10 @@ impl AudioEngine {
 
     pub(crate) fn set_volume(&self, volume: f64) -> Result<AudioStatus, String> {
         self.request(|reply| AudioCommand::SetVolume { volume, reply })
+    }
+
+    pub(crate) fn adjust_volume_by(&self, delta: f64) -> Result<AudioStatus, String> {
+        self.request(|reply| AudioCommand::AdjustVolumeBy { delta, reply })
     }
 
     pub(crate) fn set_equalizer(&self, gains: [f32; 6]) -> Result<AudioStatus, String> {
@@ -446,6 +455,17 @@ impl AudioWorker {
                 } else {
                     self.volume
                 };
+                if let Some(sink) = &self.sink {
+                    sink.set_volume(self.volume as f32);
+                }
+                self.update_transition();
+            }
+
+            AudioCommand::AdjustVolumeBy { delta, .. } => {
+                if !delta.is_finite() {
+                    return Err("Шаг изменения громкости должен быть конечным числом".to_string());
+                }
+                self.volume = (self.volume + delta).clamp(0.0, 1.0);
                 if let Some(sink) = &self.sink {
                     sink.set_volume(self.volume as f32);
                 }

@@ -15,6 +15,7 @@ const initialAudioStatus: AudioStatus = {
 export const player = {
     audioStatus: initialAudioStatus,
     saveQueue: Promise.resolve() as Promise<void>,
+    configLoaded: false,
 };
 
 // Сохранение состояния плеера в хранилище

@@ -70,4 +70,5 @@ export async function loadSavedData() {
     renderMediaLibrary();
     renderPlaylists();
     renderRecentlyPlayed();
+    player.configLoaded = true;
 }

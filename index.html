@@ -422,6 +422,19 @@
                 </label>
               </div>
             </section>
+
+            <!-- Изучение шорткатов -->
+            <section class="settings-card" id="view-shortcut" aria-labelledby="view-shortcut-title">
+              <div class="settings-card-heading">
+                <div>
+                  <h3 id="view-shortcut-title">Горячие клавиши</h3>
+                  <p>Быстрое управление воспроизведением с клавиатуры</p>
+                </div>
+                <button class="view-shortcut-btn" id="open-view-shortcut-btn" type="button" aria-haspopup="dialog" aria-controls="shortcuts-modal">
+                  <span>Посмотреть горячие клавиши</span>
+                </button>
+              </div>
+            </section>
           <p class="settings-status" id="settings-status" role="status" aria-live="polite"></p>
         </section>
 
@@ -884,6 +897,90 @@
             <div class="info-section">
               <h4>Полезный совет</h4>
               <p>Используйте прямые ссылки на конкретные композиции или видео. Если трек не удается импортировать с первой попытки, проверьте правильность ссылки и стабильность интернет-соединения.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модальное окно горячих клавиш -->
+      <div class="modal-overlay hidden" id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+        <div class="modal-content shortcuts-modal-content">
+          <div class="modal-header">
+            <div class="shortcuts-heading">
+              <div>
+                <h3 id="shortcuts-modal-title">Горячие клавиши</h3>
+                <p>Управление приложением с клавиатуры</p>
+              </div>
+            </div>
+            <button class="btn-ctrl close-modal-btn" id="close-shortcuts-modal-btn" type="button" aria-label="Закрыть">
+              <svg class="close-shortcuts-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M3 3l10 10M13 3L3 13"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="modal-body shortcuts-modal-body">
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Воспроизведение / Пауза</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Alt</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">Space</span>
+              </div>
+            </div>
+
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Следующий трек</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">→</span>
+              </div>
+            </div>
+
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Предыдущий трек</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">←</span>
+              </div>
+            </div>
+
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Увеличить громкость</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">↑</span>
+              </div>
+            </div>
+
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Уменьшить громкость</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">↓</span>
+              </div>
+            </div>
+
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Режим перемешивания</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">S</span>
+              </div>
+            </div>
+
+            <div class="shortcut-row-item">
+              <span class="shortcut-text-label">Режим повтора</span>
+              <div class="shortcut-keys-box">
+                <span class="key-pill">Ctrl</span>
+                <span class="key-plus">+</span>
+                <span class="key-pill">R</span>
+              </div>
             </div>
           </div>
         </div>

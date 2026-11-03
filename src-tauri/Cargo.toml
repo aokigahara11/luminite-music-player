@@ -1,6 +1,6 @@
 [package]
 name = "luminite-music-player"
-version = "1.7.2"
+version = "1.8.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -30,3 +30,4 @@ rand = "0.8"
 rusqlite = { version = "0.34", features = ["bundled"] }
 rodio = { version = "0.20.1", features = ["symphonia-all"] }
 hound = "3.5.1"
+tauri-plugin-global-shortcut = "2.4.1"
