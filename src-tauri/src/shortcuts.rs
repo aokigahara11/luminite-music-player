@@ -20,7 +20,7 @@ pub fn register_shortcuts(app: &AppHandle) {
     register_shortcut(app, Modifiers::CONTROL, Code::ArrowLeft, "Ctrl+Left");
     register_shortcut(app, Modifiers::CONTROL, Code::ArrowUp, "Ctrl+Up");
     register_shortcut(app, Modifiers::CONTROL, Code::ArrowDown, "Ctrl+Down");
-    register_shortcut(app, Modifiers::CONTROL, Code::KeyS, "Ctrl+S");
+    // register_shortcut(app, Modifiers::CONTROL, Code::KeyS, "Ctrl+S");
     register_shortcut(app, Modifiers::CONTROL, Code::KeyR, "Ctrl+R");
 }
 

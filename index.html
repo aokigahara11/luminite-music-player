@@ -367,18 +367,15 @@
               </label>
             </section>
 
-            <section class="settings-card delete-data" aria-labelledby="delete-data-title">
+            <!-- Изучение шорткатов -->
+            <section class="settings-card" id="view-shortcut" aria-labelledby="view-shortcut-title">
               <div class="settings-card-heading">
                 <div>
-                  <h3 id="delete-data-title">Удаление всех данных</h3>
-                  <p>Удалить все данные приложения</p>
+                  <h3 id="view-shortcut-title">Горячие клавиши</h3>
+                  <p>Быстрое управление воспроизведением с клавиатуры</p>
                 </div>
-                <button class="delete-data-control-btn" id="open-delete-data-modal-btn" type="button" aria-haspopup="dialog" aria-controls="delete-data-modal">
-                  <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                  <span>Удалить все данные</span>
+                <button class="view-shortcut-btn" id="open-view-shortcut-btn" type="button" aria-haspopup="dialog" aria-controls="shortcuts-modal">
+                  <span>Посмотреть горячие клавиши</span>
                 </button>
               </div>
             </section>
@@ -423,15 +420,18 @@
               </div>
             </section>
 
-            <!-- Изучение шорткатов -->
-            <section class="settings-card" id="view-shortcut" aria-labelledby="view-shortcut-title">
+            <section class="settings-card delete-data" aria-labelledby="delete-data-title">
               <div class="settings-card-heading">
                 <div>
-                  <h3 id="view-shortcut-title">Горячие клавиши</h3>
-                  <p>Быстрое управление воспроизведением с клавиатуры</p>
+                  <h3 id="delete-data-title">Удаление всех данных</h3>
+                  <p>Удалить все данные приложения</p>
                 </div>
-                <button class="view-shortcut-btn" id="open-view-shortcut-btn" type="button" aria-haspopup="dialog" aria-controls="shortcuts-modal">
-                  <span>Посмотреть горячие клавиши</span>
+                <button class="delete-data-control-btn" id="open-delete-data-modal-btn" type="button" aria-haspopup="dialog" aria-controls="delete-data-modal">
+                  <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span>Удалить все данные</span>
                 </button>
               </div>
             </section>
