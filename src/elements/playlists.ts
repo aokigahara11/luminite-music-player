@@ -7,6 +7,7 @@ export const elements = {
     editPlaylistBtn: document.getElementById("edit-playlist-btn") as HTMLButtonElement,
     deletePlaylistBtn: document.getElementById("delete-playlist-btn") as HTMLButtonElement,
     changePlaylistCoverBtn: document.getElementById("change-playlist-cover-btn") as HTMLButtonElement,
+    remixPlaylistBtn: document.getElementById("copy-remix-playlist-btn") as HTMLButtonElement,
     playlistBackBtn: document.getElementById("playlist-back-btn") as HTMLButtonElement,
     createPlaylistModal: document.getElementById("create-playlist-modal") as HTMLElement,
     closeModalBtn: document.getElementById("close-modal-btn") as HTMLButtonElement,

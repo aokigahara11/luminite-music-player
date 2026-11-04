@@ -4,7 +4,7 @@ import { player } from "../core/player";
 import { closeModal, openModal, switchView } from "../core/views";
 import { elements } from "../elements/home";
 import { elements as playlistsElements } from "../elements/playlists";
-import { mapStoredPlaylist, mapStoredTrack } from "../mappers";
+import { mapStoredCover, mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
 import { getThemedPlaylistCover } from "../assets";
 import type { PlaylistCategory, Track } from "../types";
@@ -12,6 +12,7 @@ import { showToast } from "../utils/toast";
 import { reloadTrackAudio, updateTrackMetadata } from "./sidebar";
 import { renderRecentlyPlayed } from "./recentlyPlayed";
 import { renderMediaLibrary, renderTrackList, updateHomeFavoritesCount } from "./tracks";
+import type { RemixSpeed } from "./remix";
 import { open } from "@tauri-apps/plugin-dialog";
 
 // Обновление количества треков в плейлисте ремиксов на главной странице
@@ -186,6 +187,7 @@ export function renderPlaylistDetail() {
         const track = state.tracks.find((item) => item.id === trackId);
         return track ? [track] : [];
     });
+    playlistsElements.remixPlaylistBtn.hidden = isSystemPlaylist || playlistTracks.length === 0;
 
     renderTrackList(playlistsElements.playlistTrackListContainer, playlistTracks, "playlist");
 }
@@ -330,4 +332,145 @@ export async function replaceTrackFromFile(trackId: string) {
         }
         throw error;
     }
+}
+
+// Создание копии плейлиста с параметрами ремикса
+export async function remixPlaylist(
+    playlistId: string,
+    speed: RemixSpeed,
+    effects: string[],
+    onProgress: (completed: number, total: number) => void,
+) {
+    let originalPlaylist = state.playlists.find((item) => item.id === playlistId);
+    if (!originalPlaylist || originalPlaylist.id === FAVORITES_PLAYLIST_ID || originalPlaylist.id === REMIXES_PLAYLIST_ID)
+        throw new Error("Исходный плейлист недоступен для создания ремикса");
+
+    let remixesPlaylist = state.playlists.find((item) => item.id === REMIXES_PLAYLIST_ID);
+
+    if (!remixesPlaylist) {
+        const refreshedPlaylists = (await api.getPlaylists()).map(mapStoredPlaylist);
+        for (const refreshedPlaylist of refreshedPlaylists) {
+            if (!state.playlists.some((playlist) => playlist.id === refreshedPlaylist.id))
+                state.playlists.push(refreshedPlaylist);
+        }
+        originalPlaylist = state.playlists.find((item) => item.id === playlistId);
+        remixesPlaylist = state.playlists.find((item) => item.id === REMIXES_PLAYLIST_ID);
+    }
+
+    if (!originalPlaylist || !remixesPlaylist)
+        throw new Error("Не удалось загрузить исходный или системный плейлист ремиксов");
+
+    const sourceTracks = originalPlaylist.trackIds.map((trackId) =>
+        state.tracks.find((track) => track.id === trackId),
+    );
+    const availableTracks = sourceTracks.filter((track): track is Track => track !== undefined);
+    if (availableTracks.length === 0)
+        throw new Error("В плейлисте нет доступных треков");
+
+    const sourceCover = (await api.getCovers()).find(
+        (cover) => cover.kind === "playlist" && cover.entity_id === originalPlaylist.id,
+    );
+    let remixPlaylist: ReturnType<typeof mapStoredPlaylist> | undefined;
+    let coverCopyError: string | undefined;
+    let failedTracks = 0;
+    let completedTracks = 0;
+
+    for (const originalTrack of sourceTracks) {
+        if (!originalTrack) {
+            completedTracks += 1;
+            onProgress(completedTracks, sourceTracks.length);
+            continue;
+        }
+        try {
+            const storedRemixTrack = await api.createAndRenderRemix(
+                originalTrack.path,
+                originalTrack.title,
+                originalTrack.artist === "Неизвестный исполнитель" ? "" : originalTrack.artist,
+                speed,
+                effects,
+            );
+            const remixTrack = mapStoredTrack(storedRemixTrack);
+            if (!state.tracks.some((track) => track.id === remixTrack.id))
+                state.tracks.push(remixTrack);
+            if (!remixesPlaylist.trackIds.includes(remixTrack.id))
+                remixesPlaylist.trackIds.push(remixTrack.id);
+
+            if (!remixPlaylist) {
+                const suffixStart = remixTrack.title.lastIndexOf(" (");
+                const remixSuffix = suffixStart >= 0
+                    ? remixTrack.title.slice(suffixStart)
+                    : " (remix)";
+                const storedPlaylist = await api.createPlaylist(
+                    `${originalPlaylist.title}${remixSuffix}`,
+                    originalPlaylist.category,
+                );
+                remixPlaylist = mapStoredPlaylist(storedPlaylist);
+                state.playlists.push(remixPlaylist);
+                if (sourceCover) {
+                    try {
+                        const storedCover = await api.setCover(
+                            "playlist",
+                            remixPlaylist.id,
+                            sourceCover.path_file,
+                        );
+                        remixPlaylist.cover = mapStoredCover(storedCover).src;
+                    }
+                    catch (error) {
+                        coverCopyError = String(error);
+                        console.error("Не удалось скопировать обложку исходного плейлиста:", error);
+                    }
+                }
+            }
+
+            await api.addTrackToPlaylist(remixPlaylist.id, remixTrack.id);
+            remixPlaylist.trackIds.push(remixTrack.id);
+        }
+        catch (error) {
+            failedTracks += 1;
+            console.error(`Не удалось создать или добавить ремикс для трека «${originalTrack.title}»:`, error);
+        }
+        finally {
+            completedTracks += 1;
+            onProgress(completedTracks, sourceTracks.length);
+        }
+    }
+
+    if (!remixPlaylist || remixPlaylist.trackIds.length === 0) {
+        if (remixPlaylist) {
+            try {
+                await api.deletePlaylist(remixPlaylist.id);
+                state.playlists = state.playlists.filter((playlist) => playlist.id !== remixPlaylist.id);
+            }
+            catch (error) {
+                renderPlaylists();
+                renderMediaLibrary();
+                updateHomeRemixesCount();
+                if (state.activeView === "playlist-detail")
+                    renderPlaylistDetail();
+                throw new Error(`Не удалось создать ремикс плейлиста; пустой плейлист не удалён: ${String(error)}`);
+            }
+        }
+        renderMediaLibrary();
+        renderPlaylists();
+        renderRecentlyPlayed();
+        updateHomeRemixesCount();
+        if (state.activeView === "playlist-detail")
+            renderPlaylistDetail();
+        throw new Error("Не удалось создать ремикс ни для одного трека");
+    }
+
+    renderMediaLibrary();
+    renderPlaylists();
+    renderRecentlyPlayed();
+    updateHomeRemixesCount();
+    if (state.activeView === "playlist-detail")
+        renderPlaylistDetail();
+
+    return {
+        playlist: remixPlaylist,
+        createdTracks: remixPlaylist.trackIds.length,
+        failedTracks,
+        totalTracks: sourceTracks.length,
+        coverCopyError,
+    };
 }

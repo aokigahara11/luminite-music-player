@@ -5,12 +5,14 @@ import { elements as remixElements } from "../elements/remix";
 import { mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
 import { showToast } from "../utils/toast";
-import { renderPlaylistDetail, renderPlaylists, updateHomeRemixesCount } from "./playlists";
+import { remixPlaylist as createPlaylistRemix, renderPlaylistDetail, renderPlaylists, updateHomeRemixesCount } from "./playlists";
 import { renderMediaLibrary } from "./tracks";
 
 export type RemixSpeed = "normal" | "slowed" | "speed_up";
 
 export let remixTrackId: string | null = null;
+
+let remixPlaylistId: string | null = null;
 
 export let remixSpeed: RemixSpeed = "normal";
 
@@ -21,11 +23,23 @@ export function closeRemixModals() {
     closeModal(remixElements.remixSpeedModal);
     closeModal(remixElements.remixSettingsModal);
     remixTrackId = null;
+    remixPlaylistId = null;
 }
 
 // Открытие модальног окна выбора скорости ремикса
 export function openRemixSpeedModal(trackId: string) {
     remixTrackId = trackId;
+    remixPlaylistId = null;
+    openRemixSpeedSelection();
+}
+
+export function openPlaylistRemixSpeedModal(playlistId: string) {
+    remixTrackId = null;
+    remixPlaylistId = playlistId;
+    openRemixSpeedSelection();
+}
+
+function openRemixSpeedSelection() {
     remixSpeed = "normal";
     remixElements.remixSettingsModal.querySelectorAll<HTMLButtonElement>("[data-effect]").forEach((button) => {
         button.setAttribute("aria-pressed", "false");
@@ -36,7 +50,7 @@ export function openRemixSpeedModal(trackId: string) {
 
 // Открытие модального окна настроек ремикса
 export function openRemixSettings(speed: RemixSpeed) {
-    if (!remixTrackId)
+    if (!remixTrackId && !remixPlaylistId)
         return;
     remixSpeed = speed;
     closeModal(remixElements.remixSpeedModal);
@@ -48,12 +62,11 @@ export function openRemixSettings(speed: RemixSpeed) {
 export async function createRemix(effects: string[]) {
     if (remixInProgress)
         return;
-    
-    const sourceTrack = state.tracks.find((track) => track.id === remixTrackId);
-    
-    if (!sourceTrack) {
+
+    const sourcePlaylistId = remixPlaylistId;
+    if (!remixTrackId && !sourcePlaylistId) {
         closeRemixModals();
-        showToast("Исходный трек не найден в медиатеке", true);
+        showToast("Исходный трек или плейлист не найден", true);
         return;
     }
 
@@ -63,6 +76,32 @@ export async function createRemix(effects: string[]) {
     remixElements.remixCreateBtn.querySelector("span")!.textContent = "Создание...";
     
     try {
+        if (sourcePlaylistId) {
+            const result = await createPlaylistRemix(
+                sourcePlaylistId,
+                remixSpeed,
+                effects,
+                (completed, total) => {
+                    remixElements.remixCreateBtn.querySelector("span")!.textContent =
+                        `Создание... ${completed}/${total}`;
+                },
+            );
+            closeRemixModals();
+            const messages = [
+                result.failedTracks
+                    ? `Создано ${result.createdTracks} из ${result.totalTracks} треков ремикса`
+                    : `Ремикс плейлиста «${result.playlist.title}» создан`,
+            ];
+            if (result.coverCopyError)
+                messages.push(`Не удалось скопировать обложку: ${result.coverCopyError}`);
+            showToast(messages.join(". "), result.failedTracks > 0 || Boolean(result.coverCopyError));
+            return;
+        }
+
+        const sourceTrack = state.tracks.find((track) => track.id === remixTrackId);
+        if (!sourceTrack)
+            throw new Error("Исходный трек не найден в медиатеке");
+
         const trackArtist = sourceTrack.artist === "Неизвестный исполнитель" ? "" : sourceTrack.artist;
         const storedRemix = await api.createAndRenderRemix(sourceTrack.path, sourceTrack.title, trackArtist, remixSpeed, effects);
         const remix = mapStoredTrack(storedRemix);

@@ -17,7 +17,7 @@ import { maybeStartTrackTransition, playNextTrack, playPrevTrack, playTrack, ren
 import { closeTrackEditor, configureSidebar, openTrackEditor, saveTrackMetadata, updateTrackListenProgress } from "../modules/sidebar";
 import { clearPendingPlaylistTrack, openAddToPlaylistModal, openCreatePlaylistModal, openEditPlaylistModal, renderAddToPlaylistOptions, resetPlaylistFormState, submitPlaylistForm } from "../modules/playlists";
 import { renderRecentlyPlayed } from "../modules/recentlyPlayed";
-import { closeRemixModals, createRemix, openRemixSettings, openRemixSpeedModal } from "../modules/remix";
+import { closeRemixModals, createRemix, openPlaylistRemixSpeedModal, openRemixSettings, openRemixSpeedModal } from "../modules/remix";
 import { setupSearch } from "../modules/search";
 import { deleteAllAppData, loadAudioSettings, loadThemeSettings, setupSettingsEvents } from "../modules/settings";
 import { addTrackHandler, toggleFavorite } from "../modules/tracks";
@@ -275,6 +275,11 @@ export async function initEvents() {
         catch (error) {
             showToast(`Не удалось сохранить обложку: ${String(error)}`, true);
         }
+    });
+
+    playlistsElements.remixPlaylistBtn?.addEventListener("click", () => {
+        if (state.selectedPlaylistId)
+            openPlaylistRemixSpeedModal(state.selectedPlaylistId);
     });
 
     playlistsElements.deletePlaylistBtn?.addEventListener("click", async () => {

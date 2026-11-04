@@ -2707,6 +2707,16 @@ input[type="range"]:hover::-webkit-slider-thumb {
   border-color: var(--accent-border);
 }
 
+#copy-remix-playlist-btn {
+  color: var(--text-muted);
+}
+
+#copy-remix-playlist-btn:hover:not(:disabled) {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
 #change-playlist-cover-btn {
   color: var(--text-muted);
 }
