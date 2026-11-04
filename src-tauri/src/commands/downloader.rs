@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -129,6 +130,20 @@ pub async fn download_tracks(app: AppHandle, url: String) -> Result<DownloadResu
         .and_then(Value::as_array)
         .map(|entries| entries.iter().filter(|entry| !entry.is_null()).count())
         .unwrap_or(1);
+
+    let mut track_ids = metadata
+        .get("entries")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.get("id").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if track_ids.is_empty() {
+        if let Some(track_id) = metadata.get("id").and_then(Value::as_str) {
+            track_ids.push(track_id.to_string());
+        }
+    }
 
     let is_collection =
         metadata.get("_type").and_then(Value::as_str) == Some("playlist") || entries > 1;
@@ -263,7 +278,7 @@ pub async fn download_tracks(app: AppHandle, url: String) -> Result<DownloadResu
         }
     }
 
-    output_paths.sort();
+    sort_download_paths(&mut output_paths, &track_ids);
     output_paths.dedup();
 
     // Привязка обложек
@@ -290,6 +305,29 @@ pub async fn download_tracks(app: AppHandle, url: String) -> Result<DownloadResu
         expected_tracks: entries,
         files,
     })
+}
+
+fn sort_download_paths(output_paths: &mut [PathBuf], track_ids: &[String]) {
+    let track_order = track_ids
+        .iter()
+        .enumerate()
+        .map(|(index, track_id)| (track_id.as_str(), index))
+        .collect::<HashMap<_, _>>();
+
+    output_paths.sort_by_key(|path| {
+        let order = downloaded_track_id(path)
+            .and_then(|track_id| track_order.get(track_id).copied())
+            .unwrap_or(usize::MAX);
+        (order, path.clone())
+    });
+}
+
+fn downloaded_track_id(path: &Path) -> Option<&str> {
+    path.file_stem()?
+        .to_str()?
+        .rsplit_once(" [")?
+        .1
+        .strip_suffix(']')
 }
 
 /// Очистить временную папку конкретной загрузки по её ID
