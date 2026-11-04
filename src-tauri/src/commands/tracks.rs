@@ -8,7 +8,7 @@ use lofty::{
     config::WriteOptions,
     file::{AudioFile, TaggedFileExt},
     probe::Probe,
-    tag::{Accessor, Tag},
+    tag::{Accessor, Tag, TagType},
 };
 use tauri::State;
 use uuid::Uuid;
@@ -182,6 +182,7 @@ pub fn edit_metadata_track(
             .map_err(|error| format!("Ошибка открытия трека: {error}"))?
             .read()
             .map_err(|error| format!("Ошибка чтения тегов трека: {error}"))?;
+        tagged_file.remove(TagType::Id3v1);
         if tagged_file.primary_tag().is_none() {
             tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
         }
