@@ -20,7 +20,7 @@ import { renderRecentlyPlayed } from "../modules/recentlyPlayed";
 import { closeRemixModals, createRemix, openPlaylistRemixSpeedModal, openRemixSettings, openRemixSpeedModal } from "../modules/remix";
 import { setupSearch } from "../modules/search";
 import { deleteAllAppData, loadAudioSettings, loadThemeSettings, setupSettingsEvents } from "../modules/settings";
-import { addTrackHandler, setMediaLibraryFilter, toggleFavorite } from "../modules/tracks";
+import { addTrackHandler, cancelPlaylistTrackRemovalConfirmation, cancelTrackDeleteConfirmation, confirmPlaylistTrackRemoval, confirmTrackDeletion, deleteTrackFromLibrary, setMediaLibraryFilter, toggleFavorite } from "../modules/tracks";
 import { state } from "../state";
 import type { AudioStatus } from "../types";
 import { showToast } from "../utils/toast";
@@ -282,19 +282,80 @@ export async function initEvents() {
             openPlaylistRemixSpeedModal(state.selectedPlaylistId);
     });
 
-    playlistsElements.deletePlaylistBtn?.addEventListener("click", async () => {
-        if (state.selectedPlaylistId) {
-            const playlistId = state.selectedPlaylistId;
+    playlistsElements.deletePlaylistBtn?.addEventListener("click", () => {
+        if (!state.selectedPlaylistId)
+            return;
+        openModal(playlistsElements.deletePlaylistModal);
+        playlistsElements.closeDeletePlaylistModalBtn.focus();
+    });
+
+    const closeDeletePlaylistModal = () => {
+        closeModal(playlistsElements.deletePlaylistModal);
+        playlistsElements.deletePlaylistBtn.focus();
+    };
+
+    playlistsElements.closeDeletePlaylistModalBtn?.addEventListener("click", closeDeletePlaylistModal);
+    playlistsElements.deletePlaylistModal?.addEventListener("click", (event) => {
+        if (event.target === playlistsElements.deletePlaylistModal)
+            closeDeletePlaylistModal();
+    });
+    playlistsElements.deletePlaylistModal?.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape")
+            closeDeletePlaylistModal();
+    });
+    playlistsElements.confirmDeletePlaylistBtn?.addEventListener("click", async () => {
+        const playlistId = state.selectedPlaylistId;
+        if (!playlistId) {
+            closeModal(playlistsElements.deletePlaylistModal);
+            return;
+        }
+        const playlist = state.playlists.find((item) => item.id === playlistId);
+        if (!playlist) {
+            closeModal(playlistsElements.deletePlaylistModal);
+            return;
+        }
+
+        const trackIdsToDelete = playlistsElements.deletePlaylistTracksCheckbox.checked
+            ? [...new Set(playlist.trackIds)]
+            : [];
+        playlistsElements.confirmDeletePlaylistBtn.disabled = true;
+        try {
             await api.deletePlaylist(playlistId);
+            state.playlists = state.playlists.filter((item) => item.id !== playlistId);
+            state.recentItems = state.recentItems.filter((item) => item.kind !== "playlist" || item.entity_id !== playlistId);
+            state.selectedPlaylistId = null;
             if (state.playbackQueuePlaylistId === playlistId) {
                 state.playbackQueuePlaylistId = null;
                 state.playbackQueueTrackIds = state.tracks.map((track) => track.id);
             }
-            state.playlists = state.playlists.filter((p) => p.id !== playlistId);
-            state.recentItems = state.recentItems.filter((item) => item.kind !== "playlist" || item.entity_id !== playlistId);
+            closeModal(playlistsElements.deletePlaylistModal);
             renderRecentlyPlayed();
             switchView("playlists");
-            showToast("Плейлист удалён");
+
+            const failedTrackIds: string[] = [];
+            for (const trackId of trackIdsToDelete) {
+                try {
+                    await deleteTrackFromLibrary(trackId, false);
+                }
+                catch (error) {
+                    console.error(`Не удалось удалить трек ${trackId} из медиатеки:`, error);
+                    failedTrackIds.push(trackId);
+                }
+            }
+
+            if (failedTrackIds.length > 0) {
+                showToast(`Плейлист удалён, но ${failedTrackIds.length} треков не удалось удалить из медиатеки`, true);
+            }
+            else {
+                showToast(trackIdsToDelete.length > 0 ? "Плейлист и треки удалены" : "Плейлист удалён");
+            }
+        }
+        catch (error) {
+            console.error("Не удалось удалить плейлист:", error);
+            showToast(`Не удалось удалить плейлист: ${String(error)}`, true);
+        }
+        finally {
+            playlistsElements.confirmDeletePlaylistBtn.disabled = false;
         }
     });
 
@@ -415,6 +476,38 @@ export async function initEvents() {
             closeModal(dataElements.deleteDataModal);
     });
     dataElements.confirmDeleteDataBtn?.addEventListener("click", () => void deleteAllAppData());
+
+    dataElements.closeDeleteTrackModalBtn?.addEventListener("click", cancelTrackDeleteConfirmation);
+    dataElements.deleteTrackModal?.addEventListener("click", (event) => {
+        if (event.target === dataElements.deleteTrackModal)
+            cancelTrackDeleteConfirmation();
+    });
+    dataElements.deleteTrackModal?.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape")
+            cancelTrackDeleteConfirmation();
+    });
+    dataElements.confirmDeleteTrackBtn?.addEventListener("click", () => {
+        void confirmTrackDeletion().catch((error) => {
+            console.error("Не удалось удалить трек:", error);
+            showToast(`Не удалось удалить трек: ${String(error)}`, true);
+        });
+    });
+
+    playlistsElements.closeRemoveTrackFromPlaylistModalBtn?.addEventListener("click", cancelPlaylistTrackRemovalConfirmation);
+    playlistsElements.removeTrackFromPlaylistModal?.addEventListener("click", (event) => {
+        if (event.target === playlistsElements.removeTrackFromPlaylistModal)
+            cancelPlaylistTrackRemovalConfirmation();
+    });
+    playlistsElements.removeTrackFromPlaylistModal?.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape")
+            cancelPlaylistTrackRemovalConfirmation();
+    });
+    playlistsElements.confirmRemoveTrackFromPlaylistBtn?.addEventListener("click", () => {
+        void confirmPlaylistTrackRemoval().catch((error) => {
+            console.error("Не удалось удалить трек из плейлиста:", error);
+            showToast(`Не удалось удалить трек из плейлиста: ${String(error)}`, true);
+        });
+    });
     setupSearch(playTrack, setMediaLibraryFilter, (playlistId) => {
         state.selectedPlaylistId = playlistId;
         switchView("playlist-detail");

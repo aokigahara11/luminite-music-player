@@ -1,9 +1,11 @@
 import { api } from "../api";
 import { FAVORITES_PLAYLIST_ID } from "../core/constants";
 import { player, savePlayerConfig } from "../core/player";
-import { switchView } from "../core/views";
+import { closeModal, openModal, switchView } from "../core/views";
+import { elements as dataElements } from "../elements/data";
 import { elements } from "../elements/home";
 import { elements as playerbarElements } from "../elements/playerbar";
+import { elements as playlistsElements } from "../elements/playlists";
 import { elements as sidebarElements } from "../elements/sidebar";
 import { mapStoredTrack } from "../mappers";
 import { state } from "../state";
@@ -29,6 +31,77 @@ let mediaLibraryFilter: MediaLibraryFilter = {
     byNameTrack: true,
     query: "",
 };
+let pendingTrackDeletionId: string | null = null;
+let trackDeleteModalOpener: HTMLElement | null = null;
+let pendingPlaylistTrackRemoval: { playlistId: string; trackId: string } | null = null;
+let playlistTrackRemovalModalOpener: HTMLElement | null = null;
+
+export function openTrackDeleteConfirmation(trackId: string, opener: HTMLElement): void {
+    pendingTrackDeletionId = trackId;
+    trackDeleteModalOpener = opener;
+    openModal(dataElements.deleteTrackModal);
+    dataElements.closeDeleteTrackModalBtn.focus();
+}
+
+export function cancelTrackDeleteConfirmation(): void {
+    pendingTrackDeletionId = null;
+    closeModal(dataElements.deleteTrackModal);
+    trackDeleteModalOpener?.focus();
+    trackDeleteModalOpener = null;
+}
+
+export async function confirmTrackDeletion(): Promise<void> {
+    const trackId = pendingTrackDeletionId;
+    if (!trackId)
+        return;
+
+    dataElements.confirmDeleteTrackBtn.disabled = true;
+
+    try {
+        await deleteTrackFromLibrary(trackId);
+        pendingTrackDeletionId = null;
+        trackDeleteModalOpener = null;
+        closeModal(dataElements.deleteTrackModal);
+    }
+
+    finally {
+        dataElements.confirmDeleteTrackBtn.disabled = false;
+    }
+}
+
+export function openPlaylistTrackRemovalConfirmation(trackId: string, opener: HTMLElement): void {
+    const playlistId = state.selectedPlaylistId;
+    if (!playlistId)
+        return;
+    pendingPlaylistTrackRemoval = { playlistId, trackId };
+    playlistTrackRemovalModalOpener = opener;
+    openModal(playlistsElements.removeTrackFromPlaylistModal);
+    playlistsElements.closeRemoveTrackFromPlaylistModalBtn.focus();
+}
+
+export function cancelPlaylistTrackRemovalConfirmation(): void {
+    pendingPlaylistTrackRemoval = null;
+    closeModal(playlistsElements.removeTrackFromPlaylistModal);
+    playlistTrackRemovalModalOpener?.focus();
+    playlistTrackRemovalModalOpener = null;
+}
+
+export async function confirmPlaylistTrackRemoval(): Promise<void> {
+    const pendingRemoval = pendingPlaylistTrackRemoval;
+    if (!pendingRemoval)
+        return;
+
+    playlistsElements.confirmRemoveTrackFromPlaylistBtn.disabled = true;
+    try {
+        await removeTrackFromPlaylist(pendingRemoval.trackId, pendingRemoval.playlistId);
+        pendingPlaylistTrackRemoval = null;
+        playlistTrackRemovalModalOpener = null;
+        closeModal(playlistsElements.removeTrackFromPlaylistModal);
+    }
+    finally {
+        playlistsElements.confirmRemoveTrackFromPlaylistBtn.disabled = false;
+    }
+}
 
 export function setMediaLibraryFilter(filter: MediaLibraryFilter): void {
     mediaLibraryFilter = { ...filter, query: filter.query.trim().toLocaleLowerCase() };
@@ -247,10 +320,10 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
                     openRemixSpeedModal(trackId);
                 }
                 else if (action === "delete-track") {
-                    await deleteTrackFromLibrary(trackId);
+                    openTrackDeleteConfirmation(trackId, button);
                 }
                 else if (action === "remove-from-playlist") {
-                    await removeTrackFromPlaylist(trackId);
+                    openPlaylistTrackRemovalConfirmation(trackId, button);
                 }
                 else if (action === "replace-track-in-playlist") {
                     await replaceTrackFromFile(trackId);
@@ -265,7 +338,7 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
 }
 
 // Удаление трека из медиатеки
-export async function deleteTrackFromLibrary(trackId: string) {
+export async function deleteTrackFromLibrary(trackId: string, notify = true) {
     const currentTrack = state.currentTrackId === trackId
         ? state.tracks.find((track) => track.id === trackId)
         : undefined;
@@ -318,12 +391,13 @@ export async function deleteTrackFromLibrary(trackId: string) {
     renderPlaylists();
     renderPlaylistDetail();
     renderRecentlyPlayed();
-    showToast("Трек удалён из медиатеки");
+    if (notify)
+        showToast("Трек удалён из медиатеки");
 }
 
 // Удаление трека из выбранного плейлиста
-export async function removeTrackFromPlaylist(trackId: string) {
-    const playlist = state.playlists.find((item) => item.id === state.selectedPlaylistId);
+export async function removeTrackFromPlaylist(trackId: string, playlistId = state.selectedPlaylistId) {
+    const playlist = state.playlists.find((item) => item.id === playlistId);
     if (!playlist)
         return;
     await api.removeTrackFromPlaylist(playlist.id, trackId);

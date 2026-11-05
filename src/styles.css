@@ -1265,6 +1265,14 @@ input[type="range"]:hover::-webkit-slider-thumb {
   outline-offset: 2px;
 }
 
+#delete-data-modal .modal-body + .modal-footer {
+  margin-top: 4px;
+}
+
+#delete-track-modal .delete-confirmation-modal-footer {
+  margin-top: 4px;
+}
+
 .view-shortcut-btn {
   display: flex;
   align-self: center;
@@ -1975,6 +1983,19 @@ input[type="range"]:hover::-webkit-slider-thumb {
     0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
+.delete-confirmation-modal {
+  gap: 10px;
+}
+
+.delete-confirmation-modal .modal-header h3,
+.delete-confirmation-modal .modal-body p {
+  margin: 0;
+}
+
+.delete-confirmation-modal .modal-body {
+  gap: 0;
+}
+
 .playlist-category-select {
   width: 100%;
   min-height: 40px;
@@ -2549,7 +2570,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-.filter-panel-option {
+.option {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -2558,7 +2579,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   cursor: pointer;
 }
 
-.filter-panel-option input {
+.option input {
   appearance: none;
   -webkit-appearance: none;
   width: 16px;
@@ -2570,11 +2591,18 @@ input[type="range"]:hover::-webkit-slider-thumb {
   cursor: pointer;
 }
 
-.filter-panel-option input:checked {
+.option input:checked {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3.2 3.2L13 4.5' fill='none' stroke='%23f5f5f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-position: center;
   background-size: 14px;
   background-repeat: no-repeat;
+}
+
+.delete-confirmation-modal-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
 }
 
 .filter-panel-search-label {
@@ -2639,6 +2667,17 @@ input[type="range"]:hover::-webkit-slider-thumb {
   background: var(--accent-soft);
   border-color: var(--accent-border);
   box-shadow: 0 0 0 1px var(--accent-border), 0 8px 28px var(--accent-glow);
+}
+
+#filter-media-library[aria-expanded="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-border), 0 8px 28px var(--accent-glow);
+}
+
+#filter-media-library[aria-expanded="true"] #icon-svg-filter {
+  color: var(--accent-hover);
+  filter: drop-shadow(0 0 4px var(--accent-glow));
 }
 
 .add-track-top-btn {

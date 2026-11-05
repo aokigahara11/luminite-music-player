@@ -201,16 +201,16 @@
             <div class="media-library-actions">
               <div class="media-library-filter-control">
                 <button class="btn-danger-icon playlist-edit-btn" id="filter-media-library" type="button" title="Фильтр" aria-label="Открыть фильтр медиатеки" aria-controls="media-library-filter-panel" aria-expanded="false">
-                  <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg class="icon-svg" id="icon-svg-filter" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
                   </svg>
                 </button>
                 <div class="media-library-filter-panel hidden" id="media-library-filter-panel" role="group" aria-label="Фильтр медиатеки">
-                  <label class="filter-panel-option" for="filter-by-track-name">
+                  <label class="option" for="filter-by-track-name">
                     <input id="filter-by-track-name" type="checkbox" checked />
                     <span>Название трека</span>
                   </label>
-                  <label class="filter-panel-option" for="filter-by-track-artist">
+                  <label class="option" for="filter-by-track-artist">
                     <input id="filter-by-track-artist" type="checkbox" checked />
                     <span>Исполнитель</span>
                   </label>
@@ -1018,7 +1018,7 @@
 
       <!-- Модальное окно для подвтерждения удаления всех данных -->
       <div class="modal-overlay hidden" id="delete-data-modal" role="dialog" aria-modal="true" aria-labelledby="delete-data-modal-title">
-        <div class="modal-content">
+        <div class="modal-content delete-confirmation-modal">
           <div class="modal-header">
             <h3 id="delete-data-modal-title">Удалить все данные?</h3>
             <button class="btn-ctrl close-modal-btn" id="close-delete-data-modal-btn" type="button" aria-label="Закрыть">
@@ -1037,6 +1037,88 @@
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
               <span>Удалить все данные</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модальное окно для удаления плейлиста -->
+      <div class="modal-overlay hidden" id="delete-playlist-modal" role="dialog" aria-modal="true" aria-labelledby="delete-playlist-modal-title">
+        <div class="modal-content delete-confirmation-modal">
+          <div class="modal-header">
+            <h3 id="delete-playlist-modal-title">Удалить плейлист</h3>
+            <button class="btn-ctrl close-modal-btn" id="close-delete-playlist-modal-btn" type="button" aria-label="Закрыть">
+              <svg width="10" height="10" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>Вы уверены, что хотите удалить данный плейлист?</p>
+          </div>
+          <div class="delete-confirmation-modal-footer">
+            <label class="option" for="delete-tracks-from-playlist-option">
+              <input id="delete-tracks-from-playlist-option" type="checkbox" checked />
+              <span>Удалить треки из медиатеки</span>
+            </label>
+            <button class="delete-data-control-btn" id="confirm-delete-playlist-btn" type="button" style="width: 100%;">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Удалить плейлист</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модальное окно для удаления трека -->
+      <div class="modal-overlay hidden" id="delete-track-modal" role="dialog" aria-modal="true" aria-labelledby="delete-track-modal-title">
+        <div class="modal-content delete-confirmation-modal">
+          <div class="modal-header">
+            <h3 id="delete-track-modal-title">Удалить трек</h3>
+            <button class="btn-ctrl close-modal-btn" id="close-delete-track-modal-btn" type="button" aria-label="Закрыть">
+              <svg width="10" height="10" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>Вы уверены, что хотите удалить данный трек?</p>
+          </div>
+          <div class="delete-confirmation-modal-footer">
+            <button class="delete-data-control-btn" id="confirm-delete-track-btn" type="button" style="width: 100%;">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Удалить трек</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модальное окно для удаления трека из плейлиста -->
+      <div class="modal-overlay hidden" id="remove-track-from-playlist-modal" role="dialog" aria-modal="true" aria-labelledby="remove-track-from-playlist-modal-title">
+        <div class="modal-content delete-confirmation-modal">
+          <div class="modal-header">
+            <h3 id="remove-track-from-playlist-modal-title">Удалить трек из плейлиста</h3>
+            <button class="btn-ctrl close-modal-btn" id="close-remove-track-from-playlist-modal-btn" type="button" aria-label="Закрыть">
+              <svg width="10" height="10" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>Вы уверены, что хотите удалить данный трек из плейлиста?</p>
+          </div>
+          <div class="delete-confirmation-modal-footer">
+            <button class="delete-data-control-btn" id="confirm-remove-track-from-playlist-btn" type="button" style="width: 100%;">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Удалить из плейлиста</span>
             </button>
           </div>
         </div>
