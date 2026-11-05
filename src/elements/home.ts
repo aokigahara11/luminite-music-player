@@ -15,5 +15,6 @@ export const elements = {
     homeRemixesCount: document.getElementById("home-remixes-count") as HTMLElement,
     recentlyPlayedGrid: document.getElementById("recently-played-grid") as HTMLElement,
     mediaEmptyState: document.getElementById("media-empty-state") as HTMLElement,
+    mediaFilterEmptyState: document.getElementById("media-library-filter-empty") as HTMLElement,
     trackListContainer: document.getElementById("track-list-container") as HTMLElement
 };

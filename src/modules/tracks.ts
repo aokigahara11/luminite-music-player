@@ -18,6 +18,23 @@ import { renderRecentlyPlayed } from "./recentlyPlayed";
 import { openRemixSpeedModal } from "./remix";
 import { open } from "@tauri-apps/plugin-dialog";
 
+interface MediaLibraryFilter {
+    byArtist: boolean;
+    byNameTrack: boolean;
+    query: string;
+}
+
+let mediaLibraryFilter: MediaLibraryFilter = {
+    byArtist: true,
+    byNameTrack: true,
+    query: "",
+};
+
+export function setMediaLibraryFilter(filter: MediaLibraryFilter): void {
+    mediaLibraryFilter = { ...filter, query: filter.query.trim().toLocaleLowerCase() };
+    renderMediaLibrary();
+}
+
 // Обновления количества треков в избранном на главной странице
 export function updateHomeFavoritesCount(): void {
     const favorites = state.playlists.find((playlist) => playlist.id === FAVORITES_PLAYLIST_ID);
@@ -54,18 +71,38 @@ export async function addTrackHandler() {
 export function renderMediaLibrary() {
     if (state.tracks.length === 0) {
         elements.mediaEmptyState?.classList.remove("hidden");
+        elements.mediaFilterEmptyState?.classList.add("hidden");
         elements.trackListContainer.style.display = "none";
     }
     else {
         elements.mediaEmptyState?.classList.add("hidden");
-        elements.trackListContainer.style.display = "block";
-        renderTrackList(elements.trackListContainer, state.tracks, "library");
+        const tracks = getFilteredLibraryTracks();
+        if (tracks.length === 0) {
+            elements.mediaFilterEmptyState?.classList.remove("hidden");
+            elements.trackListContainer.style.display = "none";
+            return;
+        }
+        elements.mediaFilterEmptyState?.classList.add("hidden");
+        elements.trackListContainer.style.display = "";
+        renderTrackList(elements.trackListContainer, tracks, "library");
     }
+}
+
+function getFilteredLibraryTracks(): Track[] {
+    const { byArtist, byNameTrack, query } = mediaLibraryFilter;
+    if (!query)
+        return state.tracks;
+
+    return state.tracks.filter((track) => {
+        const matchesName = byNameTrack && track.title.toLocaleLowerCase().includes(query);
+        const matchesArtist = byArtist && track.artist.toLocaleLowerCase().includes(query);
+        return matchesName || matchesArtist;
+    });
 }
 
 // Отрисовка списка треков в медиатеке или плейлисте
 export function renderTrackList(container: HTMLElement, tracks: Track[], context: "library" | "playlist") {
-    const header = `
+    const header = context === "playlist" ? `
     <div class="track-list-header">
       <span class="col-num">#</span>
       <span class="col-title">Название</span>
@@ -77,7 +114,7 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
         </svg>
       </span>
       <span class="col-actions"></span>
-    </div>`;
+    </div>` : "";
     const rows = tracks
         .map((track, idx) => {
         const isCurrent = state.currentTrackId === track.id;
@@ -108,6 +145,23 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
                     </button>
                     <div class="track-actions-popover" role="menu" hidden>${menuActions}</div>
                 </div>`;
+        if (context === "library") {
+            return `
+      <article class="media-card library-track-card ${isCurrent ? "active" : ""} ${isPlaying ? "playing" : ""}" data-id="${track.id}" role="button" tabindex="0" aria-label="Воспроизвести ${track.title}">
+        <div class="card-cover-wrapper">
+          <img class="card-cover" src="${track.cover || DEFAULT_TRACK_COVER}" alt="Обложка: ${track.title}" />
+          <button class="card-play-btn library-track-play" type="button" aria-label="Воспроизвести ${track.title}">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <polygon points="6,4 20,12 6,20"></polygon>
+            </svg>
+          </button>
+        </div>
+        ${actionMenu}
+        <div class="card-title">${truncate(track.title)}</div>
+        <div class="card-artist">${truncate(track.artist)}</div>
+        <div class="library-track-duration">${formatTime(track.duration)}</div>
+      </article>`;
+        }
         return `
       <div class="track-row ${isCurrent ? "active" : ""} ${isPlaying ? "playing" : ""}" data-id="${track.id}">
         <span class="col-num">${idx + 1}</span>
@@ -119,11 +173,12 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
     })
         .join("");
     container.innerHTML = header + rows;
-    
-    container.querySelectorAll(".track-row").forEach((row) => {
+
+    const itemSelector = context === "library" ? ".library-track-card" : ".track-row";
+    container.querySelectorAll<HTMLElement>(itemSelector).forEach((row) => {
         row.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
-            if (target.closest("button"))
+            if (target.closest("button, .track-actions-menu"))
                 return;
             const trackId = row.getAttribute("data-id");
             if (trackId) {
@@ -131,12 +186,30 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
                 playTrack(trackId, tracks.map((item) => item.id), playlistId);
             }
         });
+        if (context === "library") {
+            row.addEventListener("keydown", (event: KeyboardEvent) => {
+                if (event.target !== row || (event.key !== "Enter" && event.key !== " "))
+                    return;
+                event.preventDefault();
+                const trackId = row.getAttribute("data-id");
+                if (trackId)
+                    playTrack(trackId, tracks.map((item) => item.id));
+            });
+        }
+    });
+
+    container.querySelectorAll<HTMLButtonElement>(".library-track-play").forEach((button) => {
+        button.addEventListener("click", () => {
+            const trackId = button.closest<HTMLElement>(".library-track-card")?.dataset.id;
+            if (trackId)
+                playTrack(trackId, tracks.map((item) => item.id));
+        });
     });
 
     container.querySelectorAll<HTMLButtonElement>(".track-menu-trigger").forEach((button) => {
         button.addEventListener("click", (event) => {
             event.stopPropagation();
-            const row = button.closest(".track-row");
+            const row = button.closest(".track-row, .library-track-card");
             const menu = row?.querySelector<HTMLElement>(".track-actions-popover");
             if (!menu)
                 return;

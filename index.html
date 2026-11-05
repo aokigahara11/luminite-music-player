@@ -198,13 +198,39 @@
         <section class="media-section view-section" id="view-media-library">
           <div class="section-header-row">
             <h2 class="section-title">Медиатека</h2>
-            <button class="action-card add-track-top-btn" id="library-add-track-btn">
-              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              <span>Добавить трек</span>
-            </button>
+            <div class="media-library-actions">
+              <div class="media-library-filter-control">
+                <button class="btn-danger-icon playlist-edit-btn" id="filter-media-library" type="button" title="Фильтр" aria-label="Открыть фильтр медиатеки" aria-controls="media-library-filter-panel" aria-expanded="false">
+                  <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                  </svg>
+                </button>
+                <div class="media-library-filter-panel hidden" id="media-library-filter-panel" role="group" aria-label="Фильтр медиатеки">
+                  <label class="filter-panel-option" for="filter-by-track-name">
+                    <input id="filter-by-track-name" type="checkbox" checked />
+                    <span>Название трека</span>
+                  </label>
+                  <label class="filter-panel-option" for="filter-by-track-artist">
+                    <input id="filter-by-track-artist" type="checkbox" checked />
+                    <span>Исполнитель</span>
+                  </label>
+                  <div class="media-library-filter-search">
+                    <svg class="icon-svg" id="search-icon-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input id="media-library-filter-query" type="search" class="search-input" placeholder="Название или исполнитель" autocomplete="off" />
+                  </div>
+                </div>
+              </div>
+              <button class="action-card add-track-top-btn" id="library-add-track-btn">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Добавить трек</span>
+              </button>
+            </div>
           </div>
 
           <div class="empty-state hidden" id="media-empty-state">
@@ -224,20 +250,11 @@
             </button>
           </div>
 
-          <div class="track-list" id="track-list-container">
-            <div class="track-list-header">
-              <span class="col-num">#</span>
-              <span class="col-title">Название</span>
-              <span class="col-artist">Исполнитель</span>
-              <span class="col-duration">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-              </span>
-              <span class="col-actions"></span>
-            </div>
+          <div class="library-filter-empty hidden" id="media-library-filter-empty">
+            <p>Ничего не найдено. Измените запрос или параметры фильтра.</p>
           </div>
+
+          <div class="cards-grid library-track-grid" id="track-list-container"></div>
         </section>
 
         <!-- Секция: Плейлисты -->
@@ -1025,7 +1042,6 @@
         </div>
       </div>
 
-    </div>
     <script type="module" src="src/main.ts"></script>
   </body>
 </html>

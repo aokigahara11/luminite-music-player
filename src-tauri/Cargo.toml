@@ -1,6 +1,6 @@
 [package]
 name = "luminite-music-player"
-version = "1.9.1"
+version = "1.10.1"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"

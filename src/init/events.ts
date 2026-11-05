@@ -20,7 +20,7 @@ import { renderRecentlyPlayed } from "../modules/recentlyPlayed";
 import { closeRemixModals, createRemix, openPlaylistRemixSpeedModal, openRemixSettings, openRemixSpeedModal } from "../modules/remix";
 import { setupSearch } from "../modules/search";
 import { deleteAllAppData, loadAudioSettings, loadThemeSettings, setupSettingsEvents } from "../modules/settings";
-import { addTrackHandler, toggleFavorite } from "../modules/tracks";
+import { addTrackHandler, setMediaLibraryFilter, toggleFavorite } from "../modules/tracks";
 import { state } from "../state";
 import type { AudioStatus } from "../types";
 import { showToast } from "../utils/toast";
@@ -415,5 +415,8 @@ export async function initEvents() {
             closeModal(dataElements.deleteDataModal);
     });
     dataElements.confirmDeleteDataBtn?.addEventListener("click", () => void deleteAllAppData());
-    setupSearch(playTrack);
+    setupSearch(playTrack, setMediaLibraryFilter, (playlistId) => {
+        state.selectedPlaylistId = playlistId;
+        switchView("playlist-detail");
+    });
 }
