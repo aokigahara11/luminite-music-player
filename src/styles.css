@@ -1881,20 +1881,22 @@ input[type="range"]:hover::-webkit-slider-thumb {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.sidebar-left .btn-ctrl:hover {
-  background: var(--accent-soft);
-  color: var(--accent-hover);
-  box-shadow: inset 2px 0 0 var(--accent);
+.sidebar-left .btn-ctrl:hover,
+.track-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f5f5f5;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 4px 16px rgba(255, 255, 255, 0.12);
   transform: none;
 }
 
-.sidebar-left .btn-ctrl.active {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  box-shadow: inset 3px 0 0 #9a9a9f;
+.sidebar-left .btn-ctrl.active,
+.track-row.active {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  box-shadow: 0 0 0 1px var(--accent-border), 0 4px 20px var(--accent-glow);
 }
 
 .sidebar-left .btn-ctrl .icon-svg {
@@ -2727,7 +2729,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 .track-row {
   background-color: transparent;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
 }
 
@@ -2736,17 +2738,6 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .track-row .col-artist,
 .track-row .col-duration {
   transform: translateY(-2px);
-}
-
-.track-row:hover {
-  background-color: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.track-row.active {
-  background-color: rgba(255, 255, 255, 0.07);
-  color: #fff;
-  box-shadow: inset 3px 0 0 #9a9a9f;
 }
 
 .track-row.playing .col-title {
@@ -3388,9 +3379,12 @@ input[type="range"]:hover::-webkit-slider-thumb {
     white-space: nowrap;
   }
 
-  .sidebar-left .btn-ctrl.active,
   .sidebar-left .btn-ctrl:hover {
-    box-shadow: none;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 12px rgba(255, 255, 255, 0.12);
+  }
+
+  .sidebar-left .btn-ctrl.active {
+    box-shadow: 0 0 0 1px var(--accent-border), 0 0 12px var(--accent-glow);
   }
 
   .player-bar {
