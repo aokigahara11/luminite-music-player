@@ -18,6 +18,15 @@ export const api = {
     pauseAudio: () => invoke<AudioStatus>("pause_audio"),
     resumeAudio: () => invoke<AudioStatus>("resume_audio"),
     stopAudio: () => invoke<AudioStatus>("stop_audio"),
+    updateDiscordPresence: (trackTitle: string, artistName: string, positionSecs: number, durationSecs: number, isPlaying: boolean) =>
+        invoke<void>("update_discord_presence", {
+            trackTitle,
+            artistName,
+            positionSecs,
+            durationSecs,
+            isPlaying,
+        }),
+    clearDiscordPresence: () => invoke<void>("clear_discord_presence"),
     seekAudio: (positionSecs: number) => invoke<AudioStatus>("seek_audio", { positionSecs }),
     setAudioVolume: (volume: number) => invoke<AudioStatus>("set_audio_volume", { volume }),
     setEqualizer: (gains: number[]) => invoke<AudioStatus>("set_equalizer", { gains }),

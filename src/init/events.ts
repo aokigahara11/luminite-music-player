@@ -26,6 +26,46 @@ import type { AudioStatus } from "../types";
 import { showToast } from "../utils/toast";
 import { listen } from "@tauri-apps/api/event";
 
+let lastDiscordPresenceKey: string | null = null;
+let lastPresencePositionSecs = 0;
+let lastPresenceUpdatedAt = 0;
+let lastPresenceWasPlaying = false;
+
+function syncDiscordPresence(status: AudioStatus): void {
+    const track = status.trackPath && !status.ended
+        ? state.tracks.find((item) => item.path === status.trackPath)
+        : undefined;
+    const presenceKey = track
+        ? `${track.id}\0${track.title}\0${track.artist}\0${status.isPlaying}`
+        : null;
+    const now = performance.now();
+    const elapsedSecs = (now - lastPresenceUpdatedAt) / 1000;
+    const expectedPositionSecs = lastPresencePositionSecs
+        + (lastPresenceWasPlaying ? elapsedSecs : 0);
+    const seeked = presenceKey !== null
+        && presenceKey === lastDiscordPresenceKey
+        && Math.abs(status.positionSecs - expectedPositionSecs) > 2.5;
+
+    lastPresencePositionSecs = status.positionSecs;
+    lastPresenceUpdatedAt = now;
+    lastPresenceWasPlaying = status.isPlaying;
+
+    if (presenceKey === lastDiscordPresenceKey && !seeked)
+        return;
+    lastDiscordPresenceKey = presenceKey;
+
+    const request = track && status.loaded
+        ? api.updateDiscordPresence(
+            track.title,
+            track.artist,
+            status.positionSecs,
+            status.durationSecs,
+            status.isPlaying,
+        )
+        : api.clearDiscordPresence();
+    void request.catch((error) => console.error("Не удалось синхронизировать статус Discord:", error));
+}
+
 export async function initEvents() {
     configureSidebar({
         renderActiveTrackList,
@@ -40,6 +80,7 @@ export async function initEvents() {
             const volumeChanged = player.audioStatus.volume !== payload.volume;
             player.audioStatus = payload;
             state.isPlaying = payload.isPlaying;
+            syncDiscordPresence(payload);
             playerbarElements.volumeSlider.value = Math.round(payload.volume * 100).toString();
             if (volumeChanged && player.configLoaded)
                 savePlayerConfig();

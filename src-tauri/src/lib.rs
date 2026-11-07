@@ -1,6 +1,8 @@
 pub mod audio;
 pub mod commands;
 pub mod database;
+#[path = "discord-rcp.rs"]
+pub mod discord_rcp;
 pub mod models;
 pub mod shortcuts;
 
@@ -26,6 +28,7 @@ pub fn run() {
             let audio_engine =
                 audio::AudioEngine::new(app.handle().clone()).map_err(std::io::Error::other)?;
             app.manage(audio_engine);
+            app.manage(discord_rcp::DiscordState::default());
             shortcuts::register_shortcuts(app.handle());
             Ok(())
         })
@@ -62,7 +65,9 @@ pub fn run() {
             commands::audio::set_transition_duration,
             commands::audio::create_and_render_remix,
             commands::playback::get_next_track_id,
-            commands::playback::get_previous_track_id
+            commands::playback::get_previous_track_id,
+            discord_rcp::update_discord_presence,
+            discord_rcp::clear_discord_presence
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
