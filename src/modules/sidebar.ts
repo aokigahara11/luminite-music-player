@@ -4,7 +4,7 @@ import { player, savePlayerConfig } from "../core/player";
 import { elements } from "../elements/sidebar";
 import { elements as playerbarElements } from "../elements/playerbar";
 import { mapStoredTrack } from "../mappers";
-import { DEFAULT_TRACK_COVER } from "../assets";
+import { getDefaultTrackCover } from "../assets";
 import { state } from "../state";
 import type { AudioStatus, Track } from "../types";
 import { showToast } from "../utils/toast";
@@ -41,7 +41,7 @@ export function resetListenProgress(): void {
 
 // Обновляет метаданные текущего трека в боковой панели и плеере.
 export function updateTrackMetadata(track: Track): void {
-    const cover = track.cover || DEFAULT_TRACK_COVER;
+    const cover = track.cover || getDefaultTrackCover();
     elements.sidebarCoverWrapper.classList.toggle("has-cover", Boolean(track.cover));
     playerbarElements.playerTitle.textContent = track.title;
     playerbarElements.playerArtist.textContent = track.artist;
@@ -62,7 +62,7 @@ export function updateTrackMetadata(track: Track): void {
     elements.sidebarCover.onerror = () => {
         elements.sidebarCover.onerror = null;
         if (elements.sidebarCover.getAttribute("src") === cover)
-            elements.sidebarCover.src = DEFAULT_TRACK_COVER;
+            elements.sidebarCover.src = getDefaultTrackCover();
     };
     elements.sidebarCover.src = cover;
     elements.sidebarCover.alt = track.title;

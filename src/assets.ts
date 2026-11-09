@@ -1,7 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { FAVORITES_PLAYLIST_ID, REMIXES_PLAYLIST_ID } from "./core/constants";
 
-export const DEFAULT_TRACK_COVER = new URL("./assets/media_library.jpg", import.meta.url).href;
 export const FAVORITES_COVER = new URL("./assets/favorites.jpg", import.meta.url).href;
 export const REMIXES_COVER = new URL("./assets/remixes.jpg", import.meta.url).href;
 
@@ -55,6 +54,10 @@ export function setActiveTheme(theme: string): ThemeCovers {
     return covers;
 }
 
+export function getDefaultTrackCover(): string {
+    return themeCovers[activeTheme].mediaLibrary;
+}
+
 export function getThemedPlaylistCover(playlistId: string): string | undefined {
     const covers = themeCovers[activeTheme];
     if (playlistId === FAVORITES_PLAYLIST_ID)
@@ -65,12 +68,13 @@ export function getThemedPlaylistCover(playlistId: string): string | undefined {
 }
 
 const bundledCovers: Record<string, string> = {
-    "./src/assets/media_library.jpg": DEFAULT_TRACK_COVER,
     "./src/assets/favorites.jpg": FAVORITES_COVER,
     "./src/assets/remixes.jpg": REMIXES_COVER,
 };
 
 export function resolveCoverSource(source: string): string {
+    if (source === "./src/assets/media_library.jpg")
+        return getDefaultTrackCover();
     const bundledCover = bundledCovers[source];
     if (bundledCover)
         return bundledCover;

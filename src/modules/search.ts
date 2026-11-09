@@ -1,6 +1,6 @@
 import { elements } from "../elements/search";
 import { state } from "../state";
-import { DEFAULT_TRACK_COVER, getThemedPlaylistCover } from "../assets";
+import { getDefaultTrackCover, getThemedPlaylistCover } from "../assets";
 import { escapeHtml } from "../utils/format";
 
 export function setupSearch(
@@ -22,7 +22,7 @@ export function setupSearch(
             id: track.id,
             title: track.title,
             subtitle: `Трек · ${track.artist}`,
-            cover: track.cover || DEFAULT_TRACK_COVER,
+            cover: track.cover || getDefaultTrackCover(),
             type: "track",
             ariaLabel: `Воспроизвести трек ${track.title}`,
         }));
@@ -34,7 +34,7 @@ export function setupSearch(
             id: playlist.id,
             title: playlist.title,
             subtitle: `${playlist.category} · ${playlist.trackIds.length} треков`,
-            cover: getThemedPlaylistCover(playlist.id) || playlist.cover || DEFAULT_TRACK_COVER,
+            cover: getThemedPlaylistCover(playlist.id) || playlist.cover || getDefaultTrackCover(),
             type: playlist.category === "Альбом" ? "album" : playlist.category === "EP" ? "ep" : "playlist",
             ariaLabel: `Открыть ${playlist.category.toLocaleLowerCase()} ${playlist.title}`,
         }));

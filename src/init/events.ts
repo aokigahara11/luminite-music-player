@@ -30,8 +30,19 @@ let lastDiscordPresenceKey: string | null = null;
 let lastPresencePositionSecs = 0;
 let lastPresenceUpdatedAt = 0;
 let lastPresenceWasPlaying = false;
+let discordPresenceEnabled = true;
 
 function syncDiscordPresence(status: AudioStatus): void {
+    if (!discordPresenceEnabled) {
+        if (lastDiscordPresenceKey !== null) {
+            lastDiscordPresenceKey = null;
+            void api.clearDiscordPresence().catch((error) => {
+                console.error("Не удалось очистить статус Discord:", error);
+            });
+        }
+        return;
+    }
+
     const track = status.trackPath && !status.ended
         ? state.tracks.find((item) => item.path === status.trackPath)
         : undefined;
@@ -480,6 +491,12 @@ export async function initEvents() {
         });
     });
     setupSettingsEvents();
+    settingsElements.discordRcpToggle?.addEventListener("click", () => {
+        discordPresenceEnabled = !discordPresenceEnabled;
+        settingsElements.discordRcpToggle.setAttribute("aria-pressed", String(discordPresenceEnabled));
+        settingsElements.discordRcpToggle.textContent = discordPresenceEnabled ? "Включено" : "Выключено";
+        syncDiscordPresence(player.audioStatus);
+    });
 
     const closeShortcutsModal = () => {
         closeModal(settingsElements.shortcutsModal);

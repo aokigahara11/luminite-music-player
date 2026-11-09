@@ -9,7 +9,7 @@ import { elements as playlistsElements } from "../elements/playlists";
 import { elements as sidebarElements } from "../elements/sidebar";
 import { mapStoredTrack } from "../mappers";
 import { state } from "../state";
-import { DEFAULT_TRACK_COVER } from "../assets";
+import { getDefaultTrackCover } from "../assets";
 import type { Track } from "../types";
 import { formatTime, truncate } from "../utils/format";
 import { showToast } from "../utils/toast";
@@ -222,7 +222,7 @@ export function renderTrackList(container: HTMLElement, tracks: Track[], context
             return `
       <article class="media-card library-track-card ${isCurrent ? "active" : ""} ${isPlaying ? "playing" : ""}" data-id="${track.id}" role="button" tabindex="0" aria-label="Воспроизвести ${track.title}">
         <div class="card-cover-wrapper">
-          <img class="card-cover" src="${track.cover || DEFAULT_TRACK_COVER}" alt="Обложка: ${track.title}" />
+          <img class="card-cover" src="${track.cover || getDefaultTrackCover()}" alt="Обложка: ${track.title}" />
           <button class="card-play-btn library-track-play" type="button" aria-label="Воспроизвести ${track.title}">
             <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <polygon points="6,4 20,12 6,20"></polygon>
@@ -379,8 +379,8 @@ export async function deleteTrackFromLibrary(trackId: string, notify = true) {
         sidebarElements.changeTrackCoverBtn.disabled = true;
         updateFavoriteButton();
         sidebarElements.sidebarCoverWrapper.classList.remove("has-cover");
-        playerbarElements.playerCover.src = DEFAULT_TRACK_COVER;
-        sidebarElements.sidebarCover.src = DEFAULT_TRACK_COVER;
+        playerbarElements.playerCover.src = getDefaultTrackCover();
+        sidebarElements.sidebarCover.src = getDefaultTrackCover();
         closeTrackEditor();
         updatePlayButtonIcon();
         updateProgressDisplay(0);
