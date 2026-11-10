@@ -124,6 +124,32 @@ html.theme-yellow {
   flex-shrink: 0;
 }
 
+.app-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 7px 10px;
+  color: var(--text-main);
+  background: #202024;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.app-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -221,7 +247,21 @@ input[type="range"]:hover::-webkit-slider-thumb {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-right: 60px;
   min-width: 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.app-brand:active {
+  cursor: grabbing;
+}
+
+.app-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
 }
 
 .app-brand-copy {
@@ -246,6 +286,55 @@ input[type="range"]:hover::-webkit-slider-thumb {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.top-panel-right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.window-control-btn {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.window-control-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.window-control-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.window-control-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.window-control-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.2);
+  color: #f87171;
 }
 
 /* Поиск */
@@ -3230,9 +3319,13 @@ input[type="range"]:hover::-webkit-slider-thumb {
   .top-panel {
     height: 92px;
     padding: 8px 14px;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: 24px 42px;
     gap: 6px;
+  }
+
+  .app-brand {
+    margin-right: 0;
   }
 
   .app-title {
@@ -3240,11 +3333,17 @@ input[type="range"]:hover::-webkit-slider-thumb {
   }
 
   .top-panel-right {
-    display: none;
+    gap: 2px;
+  }
+
+  .window-control-btn {
+    width: 30px;
+    height: 30px;
   }
 
   .search-container {
     grid-row: 2;
+    grid-column: 1 / -1;
     max-width: none;
   }
 

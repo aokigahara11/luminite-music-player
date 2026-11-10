@@ -66,6 +66,9 @@ pub fn run() {
             commands::audio::create_and_render_remix,
             commands::playback::get_next_track_id,
             commands::playback::get_previous_track_id,
+            commands::window::minimize_app,
+            commands::window::toggle_maximize,
+            commands::window::close_app,
             discord_rcp::update_discord_presence,
             discord_rcp::clear_discord_presence
         ])

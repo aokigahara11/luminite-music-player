@@ -42,6 +42,9 @@ export const api = {
     getPlayerConfig: () => invoke<PlayerConfig>("get_player_config"),
     getRecentlyPlayed: () => invoke<RecentEntry[]>("get_recently_played"),
     deleteAllData: () => invoke<void>("delete_all_data"),
+    minimizeWindow: () => invoke<void>("minimize_app"),
+    toggleMaximizeWindow: () => invoke<void>("toggle_maximize"),
+    closeWindow: () => invoke<void>("close_app"),
     savePlayerConfig: (config: PlayerConfig) => invoke<void>("save_player_config", {
         currentTrackId: config.current_track_id,
         positionSecs: config.position_secs,

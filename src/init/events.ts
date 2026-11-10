@@ -78,6 +78,25 @@ function syncDiscordPresence(status: AudioStatus): void {
 }
 
 export async function initEvents() {
+    document.querySelector<HTMLButtonElement>("#minimize-window-btn")?.addEventListener("click", () => {
+        void api.minimizeWindow().catch((error) => {
+            console.error("Не удалось свернуть окно:", error);
+            showToast("Не удалось свернуть окно", true);
+        });
+    });
+    document.querySelector<HTMLButtonElement>("#maximize-window-btn")?.addEventListener("click", () => {
+        void api.toggleMaximizeWindow().catch((error) => {
+            console.error("Не удалось изменить размер окна:", error);
+            showToast("Не удалось изменить размер окна", true);
+        });
+    });
+    document.querySelector<HTMLButtonElement>("#close-window-btn")?.addEventListener("click", () => {
+        void api.closeWindow().catch((error) => {
+            console.error("Не удалось закрыть окно:", error);
+            showToast("Не удалось закрыть окно", true);
+        });
+    });
+
     configureSidebar({
         renderActiveTrackList,
         renderRecentlyPlayed,
