@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "luminite-music-player",
+        "title": "Luminite",
         "width": 800,
         "height": 600,
         "decorations": false,
