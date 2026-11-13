@@ -1170,6 +1170,22 @@ input[type="range"]:hover::-webkit-slider-thumb {
   gap: 32px;
 }
 
+.app-version {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.app-version-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .settings-grid {
   display: grid;
   gap: 16px;
