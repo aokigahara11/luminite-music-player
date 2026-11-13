@@ -6,7 +6,7 @@ import { elements } from "../elements/home";
 import { elements as playlistsElements } from "../elements/playlists";
 import { mapStoredCover, mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
-import { getThemedPlaylistCover } from "../assets";
+import { getDefaultPlaylistCover } from "../assets";
 import type { PlaylistCategory, Track } from "../types";
 import { showToast } from "../utils/toast";
 import { reloadTrackAudio, updateTrackMetadata } from "./sidebar";
@@ -129,7 +129,7 @@ export function renderPlaylists() {
         playlistsElements.playlistsEmptyState?.classList.add("hidden");
         playlistsElements.playlistsGrid.innerHTML = state.playlists
             .map((pl) => {
-        const cover = getThemedPlaylistCover(pl.id) || pl.cover;
+        const cover = getDefaultPlaylistCover(pl.id) || pl.cover;
         return `
       <div class="media-card" data-playlist-id="${pl.id}">
         <div class="card-cover-wrapper">
@@ -204,7 +204,7 @@ export function renderAddToPlaylistOptions() {
     playlistsElements.modalPlaylistsList.classList.toggle("hidden", matchingPlaylists.length === 0);
     playlistsElements.modalPlaylistsList.innerHTML = matchingPlaylists
         .map((playlist) => {
-        const cover = getThemedPlaylistCover(playlist.id)
+        const cover = getDefaultPlaylistCover(playlist.id)
             || playlist.cover
             || "";
         return `

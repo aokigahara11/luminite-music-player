@@ -5,7 +5,7 @@ import { state } from "../state";
 import type { RecentItemKind } from "../types";
 import { escapeHtml } from "../utils/format";
 import { playTrack } from "./playerbar";
-import { getThemedPlaylistCover, resolveCoverSource } from "../assets";
+import { getDefaultPlaylistCover, resolveCoverSource } from "../assets";
 
 export let recentSaveQueue: Promise<void> = Promise.resolve();
 
@@ -19,7 +19,7 @@ export function renderRecentlyPlayed() {
 
     homeElements.recentlyPlayedGrid.innerHTML = items.map((item) => {
         const coverPath = item.kind === "playlist"
-            ? getThemedPlaylistCover(item.entity_id) || resolveCoverSource(item.cover.path)
+            ? getDefaultPlaylistCover(item.entity_id) || resolveCoverSource(item.cover.path)
             : resolveCoverSource(item.cover.path);
         const cover = escapeHtml(coverPath);
         const title = escapeHtml(item.title);

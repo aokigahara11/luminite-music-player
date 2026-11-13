@@ -1,6 +1,6 @@
 import { elements } from "../elements/search";
 import { state } from "../state";
-import { getDefaultTrackCover, getThemedPlaylistCover } from "../assets";
+import { getDefaultPlaylistCover, getDefaultTrackCover } from "../assets";
 import { escapeHtml } from "../utils/format";
 
 export function setupSearch(
@@ -34,7 +34,7 @@ export function setupSearch(
             id: playlist.id,
             title: playlist.title,
             subtitle: `${playlist.category} · ${playlist.trackIds.length} треков`,
-            cover: getThemedPlaylistCover(playlist.id) || playlist.cover || getDefaultTrackCover(),
+            cover: getDefaultPlaylistCover(playlist.id) || playlist.cover || getDefaultTrackCover(),
             type: playlist.category === "Альбом" ? "album" : playlist.category === "EP" ? "ep" : "playlist",
             ariaLabel: `Открыть ${playlist.category.toLocaleLowerCase()} ${playlist.title}`,
         }));
