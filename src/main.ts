@@ -31,6 +31,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
         initTooltips();
         await initEvents();
+        document.getElementById("open-miniplayer-btn")?.addEventListener("click", async () => {
+            try {
+                const miniplayerWindow = await WebviewWindow.getByLabel("miniplayer");
+                await miniplayerWindow?.show();
+            } catch (error) {
+                console.error("Не удалось открыть миниплеер:", error);
+            }
+        });
         try {
             await loadSavedData();
         } catch (error) {

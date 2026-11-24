@@ -1,0 +1,205 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --accent: #a855f7;
+  --accent-hover: #c084fc;
+  --accent-border: rgba(192, 132, 252, 0.45);
+  --accent-glow: rgba(168, 85, 247, 0.35);
+  --accent-play-soft: #20162c;
+  --bg-elevated-2: #161618;
+  --border-strong: rgba(255, 255, 255, 0.11);
+  --text-main: #e9e9eb;
+  --text-muted: rgba(233, 233, 235, 0.52);
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text-main);
+  font-family: system-ui, -apple-system, sans-serif;
+  user-select: none;
+}
+
+.miniplayer {
+  position: relative;
+  width: 300px;
+  height: 82px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 10px 12px;
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: playerBarIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.miniplayer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35) 50%, transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@keyframes playerBarIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.track-info {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.track-cover-wrapper {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-elevated-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.track-cover-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.miniplayer-track-text {
+  min-width: 0;
+  max-width: 104px;
+}
+
+.miniplayer-title,
+.track-artist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.miniplayer-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.4;
+}
+
+.track-artist {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.miniplayer-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding-right: 16px;
+}
+
+.control-button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-main);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+}
+
+.control-button:hover {
+  color: var(--accent-hover);
+  transform: scale(1.04);
+}
+
+.control-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.control-button-play {
+  width: 40px;
+  height: 40px;
+  margin: 0 2px;
+  background: #2b2e34;
+  border: 1px solid var(--border-strong);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.control-button-play:hover {
+  background: var(--accent-play-soft);
+  border-color: var(--accent-hover);
+  color: #fff;
+  transform: scale(1.06);
+  box-shadow: 0 0 0 1px var(--accent-border), 0 8px 28px var(--accent-glow);
+}
+
+.control-button-play:hover svg {
+  color: #fff;
+  fill: #fff;
+}
+
+.control-button-play svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.close-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  z-index: 2;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.close-button svg {
+  fill: none;
+  width: 11px;
+  height: 11px;
+}
+
+.close-button:hover {
+  color: #ff6b6b;
+  background: rgba(255, 77, 77, 0.1);
+}

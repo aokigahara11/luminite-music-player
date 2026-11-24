@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Миниплеер</title>
+    <link rel="stylesheet" href="/src/miniplayer/miniplayer.css" />
+  </head>
+  <body>
+    <div class="miniplayer" data-tauri-drag-region>
+      <div class="track-info">
+        <div class="track-cover-wrapper">
+          <img src="/src/assets/media_library.png" alt="" class="track-cover-img" id="player-cover" />
+        </div>
+
+        <div class="miniplayer-track-text">
+          <div class="miniplayer-title" id="player-title">Трек не выбран</div>
+          <div class="track-artist" id="player-artist">Выберите трек для воспроизведения</div>
+        </div>
+      </div>
+
+      <div class="miniplayer-controls">
+        <button class="control-button" id="prev-btn" type="button" aria-label="Предыдущий трек">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M18 6l-8 6 8 6V6z"/></svg>
+        </button>
+        <button class="control-button control-button-play" id="play-btn" type="button" aria-label="Воспроизвести">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="control-button" id="next-btn" type="button" aria-label="Следующий трек">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M6 6l8 6-8 6V6z"/></svg>
+        </button>
+        <button class="control-button close-button" id="close-miniplayer-btn" type="button" aria-label="Закрыть миниплеер">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 3.5 9 9m0-9-9 9"/></svg>
+        </button>
+      </div>
+    </div>
+    <script type="module" src="/src/miniplayer/miniplayer.ts"></script>
+  </body>
+</html>

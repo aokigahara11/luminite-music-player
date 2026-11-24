@@ -32,6 +32,7 @@ export default defineConfig(async () => ({
       input: {
         main: "index.html",
         splashscreen: "splashscreen.html",
+        miniplayer: "miniplayer.html",
       },
     },
   },
