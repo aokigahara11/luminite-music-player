@@ -2507,6 +2507,10 @@ input[type="range"]:hover::-webkit-slider-thumb {
   gap: 14px;
 }
 
+.remix-effects-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .remix-choice-button {
   min-width: 0;
   min-height: 176px;
@@ -3150,7 +3154,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
     gap: 7px;
   }
 
-  .remix-choice-button:last-child {
+  .remix-modal-body:not(.remix-effects-grid) .remix-choice-button:last-child {
     width: 72%;
     grid-column: 1 / -1;
     justify-self: center;

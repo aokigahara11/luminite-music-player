@@ -7,7 +7,7 @@ import { elements as playlistsElements } from "../elements/playlists";
 import { mapStoredCover, mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
 import { getDefaultPlaylistCover } from "../assets";
-import type { PlaylistCategory, Track } from "../types";
+import type { PlaylistCategory, RemixEffect, Track } from "../types";
 import { showToast } from "../utils/toast";
 import { reloadTrackAudio, updateTrackMetadata } from "./sidebar";
 import { renderRecentlyPlayed } from "./recentlyPlayed";
@@ -338,7 +338,7 @@ export async function replaceTrackFromFile(trackId: string) {
 export async function remixPlaylist(
     playlistId: string,
     speed: RemixSpeed,
-    effects: string[],
+    effects: RemixEffect[],
     onProgress: (completed: number, total: number) => void,
 ) {
     let originalPlaylist = state.playlists.find((item) => item.id === playlistId);

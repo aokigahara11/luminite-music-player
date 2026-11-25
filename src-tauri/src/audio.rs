@@ -844,6 +844,84 @@ where
     }
 }
 
+// Басс-буст ремикс 
+struct BassBoost<I> {
+    input: I,
+    sample_rate: u32,
+    channels: usize,
+    channel_index: usize,
+    filters: Vec<Biquad>,
+    boost_gain: f32,
+    drive: f32,
+}
+
+impl<I> BassBoost<I>
+where
+    I: Source<Item = f32>,
+{
+    fn new(input: I, freq_hz: f32, gain_db: f32) -> Self {
+        let sample_rate = input.sample_rate().max(1);
+        let channels = input.channels().max(1) as usize;
+
+        let boost_gain = (10.0_f32.powf(gain_db / 20.0) - 1.0).max(0.0);
+        let drive = 1.0 + (gain_db.max(0.0) / 18.0);
+
+        let mut filters = vec![Biquad::default(); channels];
+        for filter in &mut filters {
+            filter.configure(freq_hz, gain_db, sample_rate as f32);
+        }
+
+        Self {
+            input,
+            sample_rate,
+            channels,
+            channel_index: 0,
+            filters,
+            boost_gain,
+            drive,
+        }
+    }
+}
+
+impl<I> Iterator for BassBoost<I>
+where
+    I: Source<Item = f32>,
+{
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let sample = self.input.next()?;
+        let ch = self.channel_index;
+        self.channel_index = (self.channel_index + 1) % self.channels;
+
+        let low = self.filters[ch].process(sample);
+        let boosted = (sample + low * self.boost_gain) * self.drive;
+
+        Some(boosted.tanh() / self.drive.sqrt())
+    }
+}
+
+impl<I> Source for BassBoost<I>
+where
+    I: Source<Item = f32>,
+{
+    fn current_frame_len(&self) -> Option<usize> {
+        self.input.current_frame_len()
+    }
+
+    fn channels(&self) -> u16 {
+        self.channels as u16
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        self.input.total_duration()
+    }
+}
+
 // Рендер ремикса
 pub(crate) fn render_remix(
     file_path: &Path,
@@ -872,12 +950,14 @@ pub(crate) fn render_remix(
     let mut has_lofi = false;
     let mut has_reverb = false;
     let mut has_8d = false;
+    let mut has_bass_boost = false;
 
     for effect in effects {
         match effect.as_str() {
             "lofi" => has_lofi = true,
             "reverb" => has_reverb = true,
             "8d" | "8daudio" => has_8d = true,
+            "bass_boost" => has_bass_boost = true,
             _ => return Err(format!("Неизвестный эффект: {effect}").into()),
         }
     }
@@ -890,6 +970,9 @@ pub(crate) fn render_remix(
     }
     if has_8d {
         processed = Box::new(AutoPan::new(processed, 0.08));
+    }
+    if has_bass_boost {
+        processed = Box::new(BassBoost::new(processed, 90.0, 8.0));
     }
 
     std::fs::create_dir_all(output_dir)?;
@@ -924,6 +1007,7 @@ pub(crate) fn render_remix(
     for effect in effects {
         labels.push(match effect.as_str() {
             "8daudio" => "8d",
+            "bass_boost" => "bass boost",
             other => other,
         });
     }

@@ -7,6 +7,7 @@ import type {
     PlaylistCategory,
     RecentEntry,
     RecentItemKind,
+    RemixEffect,
     StoredCover,
     StoredPlaylist,
     StoredTrack,
@@ -59,7 +60,7 @@ export const api = {
         trackTitle: string,
         trackArtist: string,
         speedType: "normal" | "slowed" | "speed_up",
-        effects: string[],
+        effects: RemixEffect[],
     ) =>
         invoke<StoredTrack>("create_and_render_remix", { filePath, trackTitle, trackArtist, speedType, effects }),
     deleteTrack: (trackId: string) => invoke<StoredTrack[]>("delete_track", { trackId }),

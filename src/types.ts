@@ -1,6 +1,7 @@
 export type PlaylistCategory = "EP" | "Альбом" | "Плейлист";
 export type CoverKind = "track" | "playlist";
 export type RecentItemKind = "track" | "playlist";
+export type RemixEffect = "lofi" | "reverb" | "8d" | "bass_boost";
 
 export interface Track {
     id: string;

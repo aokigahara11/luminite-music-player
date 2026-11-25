@@ -4,6 +4,7 @@ import { closeModal, openModal } from "../core/views";
 import { elements as remixElements } from "../elements/remix";
 import { mapStoredPlaylist, mapStoredTrack } from "../mappers";
 import { state } from "../state";
+import type { RemixEffect } from "../types";
 import { showToast } from "../utils/toast";
 import { remixPlaylist as createPlaylistRemix, renderPlaylistDetail, renderPlaylists, updateHomeRemixesCount } from "./playlists";
 import { renderMediaLibrary } from "./tracks";
@@ -59,7 +60,7 @@ export function openRemixSettings(speed: RemixSpeed) {
 }
 
 // Создание ремикса трека с выбранными эффектами
-export async function createRemix(effects: string[]) {
+export async function createRemix(effects: RemixEffect[]) {
     if (remixInProgress)
         return;
 

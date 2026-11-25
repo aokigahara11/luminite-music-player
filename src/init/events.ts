@@ -22,7 +22,7 @@ import { setupSearch } from "../modules/search";
 import { deleteAllAppData, loadAudioSettings, loadThemeSettings, setupSettingsEvents } from "../modules/settings";
 import { addTrackHandler, cancelPlaylistTrackRemovalConfirmation, cancelTrackDeleteConfirmation, confirmPlaylistTrackRemoval, confirmTrackDeletion, deleteTrackFromLibrary, setMediaLibraryFilter, toggleFavorite } from "../modules/tracks";
 import { state } from "../state";
-import type { AudioStatus } from "../types";
+import type { AudioStatus, RemixEffect } from "../types";
 import { showToast } from "../utils/toast";
 import { listen } from "@tauri-apps/api/event";
 
@@ -312,7 +312,8 @@ export async function initEvents() {
     remixElements.remixCreateBtn.addEventListener("click", () => {
         const effects = Array.from(remixElements.remixSettingsModal.querySelectorAll<HTMLButtonElement>("[data-effect][aria-pressed='true']"))
             .map((button) => button.dataset.effect)
-            .filter((effect): effect is string => Boolean(effect));
+            .filter((effect): effect is RemixEffect =>
+                effect === "lofi" || effect === "reverb" || effect === "8d" || effect === "bass_boost");
         void createRemix(effects);
     });
 

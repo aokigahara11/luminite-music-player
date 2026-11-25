@@ -47,3 +47,36 @@ pub fn save(connection: &Connection, config: &PlayerConfig) -> Result<(), String
         .map(|_| ())
         .map_err(|error| format!("Не удалось сохранить настройки плеера: {error}"))
 }
+
+pub fn clear_playing_on_startup(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute("UPDATE player_config SET is_playing = 0 WHERE id = 1", [])
+        .map(|_| ())
+        .map_err(|error| format!("Не удалось сбросить состояние воспроизведения: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_stops_playback_without_resetting_track_position_or_volume() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize(&connection).unwrap();
+        let config = PlayerConfig {
+            current_track_id: Some("track-1".to_string()),
+            position_secs: 12.5,
+            volume: 0.4,
+            is_playing: true,
+        };
+        save(&connection, &config).unwrap();
+
+        clear_playing_on_startup(&connection).unwrap();
+
+        let saved = get(&connection).unwrap();
+        assert_eq!(saved.current_track_id, config.current_track_id);
+        assert_eq!(saved.position_secs, config.position_secs);
+        assert_eq!(saved.volume, config.volume);
+        assert!(!saved.is_playing);
+    }
+}
