@@ -1,7 +1,7 @@
 use crate::models::{RecentItem, RecentItemKind};
 use rusqlite::{params, Connection};
 
-const RECENT_ITEMS_LIMIT: usize = 5;
+pub const RECENT_ITEMS_LIMIT: usize = 8;
 
 pub fn initialize(connection: &Connection) -> Result<(), String> {
     connection
@@ -92,7 +92,7 @@ pub fn remove_entity(
 
 #[cfg(test)]
 mod tests {
-    use super::{all, initialize, record};
+    use super::{all, initialize, record, RECENT_ITEMS_LIMIT};
     use crate::models::{RecentItem, RecentItemKind};
     use rusqlite::Connection;
 
@@ -100,7 +100,7 @@ mod tests {
     fn recording_existing_item_keeps_other_recent_items() {
         let connection = Connection::open_in_memory().unwrap();
         initialize(&connection).unwrap();
-        for index in 0..6 {
+        for index in 0..=RECENT_ITEMS_LIMIT {
             record(
                 &connection,
                 &RecentItem {
@@ -122,7 +122,7 @@ mod tests {
         }
 
         let history = all(&connection).unwrap();
-        assert_eq!(history.len(), 5);
+        assert_eq!(history.len(), RECENT_ITEMS_LIMIT);
         assert_eq!(history[0].entity_id, "track-1");
         assert!(!history.iter().any(|item| item.entity_id == "track-0"));
         assert_eq!(

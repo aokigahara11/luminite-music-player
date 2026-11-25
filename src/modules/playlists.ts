@@ -14,6 +14,7 @@ import { renderRecentlyPlayed } from "./recentlyPlayed";
 import { renderMediaLibrary, renderTrackList, updateHomeFavoritesCount } from "./tracks";
 import type { RemixSpeed } from "./remix";
 import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 // Обновление количества треков в плейлисте ремиксов на главной странице
 export function updateHomeRemixesCount(): void {
@@ -22,6 +23,15 @@ export function updateHomeRemixesCount(): void {
 }
 
 let playlistToEditId: string | null = null;
+let pendingPlaylistCoverPath: string | null = null;
+
+function setPlaylistCoverPreview(source?: string): void {
+    playlistsElements.playlistCoverPreview.hidden = !source;
+    playlistsElements.playlistCoverPreview.removeAttribute("src");
+    if (source)
+        playlistsElements.playlistCoverPreview.src = source;
+    playlistsElements.playlistCoverPlaceholder.hidden = Boolean(source);
+}
 
 // 
 export function clearPendingPlaylistTrack(): void {
@@ -31,11 +41,15 @@ export function clearPendingPlaylistTrack(): void {
 export function resetPlaylistFormState(): void {
     trackToAddToPlaylist = null;
     playlistToEditId = null;
+    pendingPlaylistCoverPath = null;
+    setPlaylistCoverPreview();
 }
 
 // Открытие модального окна создания плейлиста
 export function openCreatePlaylistModal() {
     playlistToEditId = null;
+    pendingPlaylistCoverPath = null;
+    setPlaylistCoverPreview();
     playlistsElements.playlistModalTitle.textContent = "Новый плейлист";
     playlistsElements.submitPlaylistBtn.textContent = "Создать";
     playlistsElements.playlistNameInput.value = "";
@@ -43,6 +57,25 @@ export function openCreatePlaylistModal() {
     playlistsElements.playlistFormStatus.textContent = "";
     playlistsElements.playlistFormStatus.hidden = true;
     openModal(playlistsElements.createPlaylistModal);
+}
+
+export async function choosePlaylistCover(): Promise<void> {
+    try {
+        const filePath = await open({
+            multiple: false,
+            filters: [{ name: "Изображения", extensions: ["jpg", "jpeg", "png", "webp"] }],
+        });
+        if (typeof filePath !== "string")
+            return;
+        pendingPlaylistCoverPath = filePath;
+        setPlaylistCoverPreview(convertFileSrc(filePath));
+        playlistsElements.playlistFormStatus.textContent = "";
+        playlistsElements.playlistFormStatus.hidden = true;
+    }
+    catch (error) {
+        playlistsElements.playlistFormStatus.textContent = `Не удалось выбрать обложку: ${String(error)}`;
+        playlistsElements.playlistFormStatus.hidden = false;
+    }
 }
 
 // Открытие модального окна изменения метаданных кода
@@ -55,6 +88,8 @@ export function openEditPlaylistModal() {
     playlistsElements.submitPlaylistBtn.textContent = "Сохранить";
     playlistsElements.playlistNameInput.value = playlist.title;
     playlistsElements.playlistCategorySelect.value = playlist.category;
+    pendingPlaylistCoverPath = null;
+    setPlaylistCoverPreview(playlist.cover);
     playlistsElements.playlistFormStatus.textContent = "";
     playlistsElements.playlistFormStatus.hidden = true;
     openModal(playlistsElements.createPlaylistModal);
@@ -74,10 +109,11 @@ export async function submitPlaylistForm() {
     }
     playlistsElements.submitPlaylistBtn.disabled = true;
     playlistsElements.playlistFormStatus.hidden = true;
+    let coverSaveError: string | null = null;
     try {
         if (playlistToEditId) {
             const storedPlaylist = await api.editPlaylist(playlistToEditId, name, category);
-            const updatedPlaylist = {
+            let updatedPlaylist = {
                 ...mapStoredPlaylist(storedPlaylist),
                 cover: state.playlists.find((playlist) => playlist.id === storedPlaylist.id)?.cover,
             };
@@ -85,13 +121,28 @@ export async function submitPlaylistForm() {
             renderPlaylists();
             renderPlaylistDetail();
             renderRecentlyPlayed();
+            if (pendingPlaylistCoverPath) {
+                const storedCover = await api.setCover("playlist", updatedPlaylist.id, pendingPlaylistCoverPath);
+                updatedPlaylist = { ...updatedPlaylist, cover: mapStoredCover(storedCover).src };
+                state.playlists = state.playlists.map((playlist) => playlist.id === updatedPlaylist.id ? updatedPlaylist : playlist);
+                renderPlaylists();
+                renderPlaylistDetail();
+                renderRecentlyPlayed();
+            }
         }
         else {
-            await createPlaylist(name, category);
+            coverSaveError = await createPlaylist(name, category, pendingPlaylistCoverPath ?? undefined);
         }
         closeModal(playlistsElements.createPlaylistModal);
         playlistToEditId = null;
-        showToast(isEditing ? "Изменения сохранены" : "Плейлист создан");
+        pendingPlaylistCoverPath = null;
+        setPlaylistCoverPreview();
+        if (isEditing)
+            showToast("Изменения сохранены");
+        else if (coverSaveError)
+            showToast(`Плейлист создан, но не удалось сохранить обложку: ${coverSaveError}`, true);
+        else
+            showToast("Плейлист создан");
     }
     catch (error) {
         playlistsElements.playlistFormStatus.textContent = error instanceof Error ? error.message : "Не удалось сохранить плейлист";
@@ -103,9 +154,9 @@ export async function submitPlaylistForm() {
 }
 
 // Создание нового плейлиста
-export async function createPlaylist(title: string, category: PlaylistCategory) {
+export async function createPlaylist(title: string, category: PlaylistCategory, coverPath?: string): Promise<string | null> {
     if (!title.trim())
-        return;
+        return null;
     const storedPlaylist = await api.createPlaylist(title.trim(), category);
     const newPlaylist = mapStoredPlaylist(storedPlaylist);
     if (trackToAddToPlaylist) {
@@ -113,10 +164,22 @@ export async function createPlaylist(title: string, category: PlaylistCategory) 
         newPlaylist.trackIds.push(trackToAddToPlaylist);
         trackToAddToPlaylist = null;
     }
+    let coverError: string | null = null;
+    if (coverPath) {
+        try {
+            const storedCover = await api.setCover("playlist", newPlaylist.id, coverPath);
+            newPlaylist.cover = mapStoredCover(storedCover).src;
+        }
+        catch (error) {
+            coverError = String(error);
+            console.error("Не удалось сохранить обложку нового плейлиста:", error);
+        }
+    }
     state.playlists.push(newPlaylist);
     closeModal(playlistsElements.createPlaylistModal);
     if (state.activeView === "playlists")
         renderPlaylists();
+    return coverError;
 }
 
 // Отрисовка плейлистов

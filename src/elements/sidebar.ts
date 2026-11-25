@@ -1,4 +1,5 @@
 export const elements = {
+    toggleSidebarBtn: document.getElementById("toggle-sidebar-btn") as HTMLButtonElement,
     sidebarTitle: document.getElementById("sidebar-title") as HTMLElement,
     sidebarArtist: document.getElementById("sidebar-artist") as HTMLElement,
     sidebarPlayCount: document.getElementById("sidebar-play-count") as HTMLElement,

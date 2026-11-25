@@ -12,7 +12,33 @@ const nextButton = document.getElementById("next-btn") as HTMLButtonElement;
 const closeButton = document.getElementById("close-miniplayer-btn") as HTMLButtonElement;
 
 const defaultCover = new URL("../assets/media_library.png", import.meta.url).href;
+const THEMES = [
+    "theme-purple",
+    "theme-emerald",
+    "theme-red",
+    "theme-blue",
+    "theme-orange",
+    "theme-pink",
+    "theme-yellow",
+] as const;
+const THEME_CLASSES = new Set<string>(THEMES);
 let isPlaying = false;
+
+function applyTheme(theme: string): void {
+    if (!THEME_CLASSES.has(theme))
+        return;
+
+    document.documentElement.classList.remove(...THEMES);
+    document.documentElement.classList.add(theme);
+}
+
+try {
+    const savedTheme = localStorage.getItem("luminite-theme");
+    if (savedTheme)
+        applyTheme(savedTheme);
+} catch (error) {
+    console.error("Не удалось загрузить тему миниплеера:", error);
+}
 
 function setPlayIcon(): void {
     playButton.innerHTML = isPlaying
@@ -54,6 +80,10 @@ playButton.addEventListener("click", () => void emit("player-shortcut-action", "
 prevButton.addEventListener("click", () => void emit("player-shortcut-action", "previous-track"));
 nextButton.addEventListener("click", () => void emit("player-shortcut-action", "next-track"));
 closeButton.addEventListener("click", () => void getCurrentWindow().hide());
+
+void listen<string>("theme-changed", ({ payload }) => applyTheme(payload)).catch((error) => {
+    console.error("Не удалось подписаться на смену темы для миниплеера:", error);
+});
 
 void listen<AudioStatus>("audio-state", ({ payload }) => {
     isPlaying = payload.isPlaying;

@@ -7,7 +7,6 @@ use crate::{
     },
 };
 
-const RECENT_ITEMS_LIMIT: usize = 5;
 const DEFAULT_TRACK_COVER: &str = "./src/assets/media_library.jpg";
 const DEFAULT_FAVORITES_COVER: &str = "./src/assets/favorites.jpg";
 
@@ -65,7 +64,7 @@ fn resolve_recent_items(
 ) -> Vec<RecentEntry> {
     items
         .iter()
-        .take(RECENT_ITEMS_LIMIT)
+        .take(recently_played::RECENT_ITEMS_LIMIT)
         .filter_map(|item| {
             let (title, subtitle, cover_kind, default_cover) = match item.kind {
                 RecentItemKind::Track => {

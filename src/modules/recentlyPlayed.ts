@@ -6,6 +6,7 @@ import type { RecentItemKind } from "../types";
 import { escapeHtml } from "../utils/format";
 import { playTrack } from "./playerbar";
 import { getDefaultPlaylistCover, resolveCoverSource } from "../assets";
+import { updateHomeCarouselControls } from "./homeCarousel";
 
 export let recentSaveQueue: Promise<void> = Promise.resolve();
 
@@ -14,6 +15,7 @@ export function renderRecentlyPlayed() {
     const items = state.recentItems;
     if (items.length === 0) {
         homeElements.recentlyPlayedGrid.innerHTML = '<p class="recently-played-empty">Пока ничего не прослушано</p>';
+        updateHomeCarouselControls();
         return;
     }
 
@@ -53,6 +55,7 @@ export function renderRecentlyPlayed() {
             }
         });
     });
+    updateHomeCarouselControls();
 }
 
 // Сохранение истории прослушивания трека или плейлиста

@@ -15,9 +15,12 @@ import { changeCover } from "../modules/covers";
 import { handleDownload } from "../modules/downloader";
 import { maybeStartTrackTransition, playNextTrack, playPrevTrack, playTrack, renderActiveTrackList, togglePlay, toggleRepeatMode, toggleShuffle, transitionPendingForTrackId, updatePlayButtonIcon, updatePlaybackModeButtons, updateProgressDisplay, updateProgressTooltip, updateTrackTextMarquee } from "../modules/playerbar";
 import { closeTrackEditor, configureSidebar, openTrackEditor, saveTrackMetadata, updateTrackListenProgress } from "../modules/sidebar";
-import { clearPendingPlaylistTrack, openAddToPlaylistModal, openCreatePlaylistModal, openEditPlaylistModal, renderAddToPlaylistOptions, resetPlaylistFormState, submitPlaylistForm } from "../modules/playlists";
+import { choosePlaylistCover, clearPendingPlaylistTrack, openAddToPlaylistModal, openCreatePlaylistModal, openEditPlaylistModal, renderAddToPlaylistOptions, resetPlaylistFormState, submitPlaylistForm } from "../modules/playlists";
 import { renderRecentlyPlayed } from "../modules/recentlyPlayed";
 import { closeRemixModals, createRemix, openPlaylistRemixSpeedModal, openRemixSettings, openRemixSpeedModal } from "../modules/remix";
+import { setupResizableSidebar } from "../modules/layout";
+import { setupHomeCarouselControls } from "../modules/homeCarousel";
+import { setupAppGuide } from "../modules/guide";
 import { setupSearch } from "../modules/search";
 import { deleteAllAppData, loadAudioSettings, loadThemeSettings, setupSettingsEvents } from "../modules/settings";
 import { addTrackHandler, cancelPlaylistTrackRemovalConfirmation, cancelTrackDeleteConfirmation, confirmPlaylistTrackRemoval, confirmTrackDeletion, deleteTrackFromLibrary, setMediaLibraryFilter, toggleFavorite } from "../modules/tracks";
@@ -78,6 +81,9 @@ function syncDiscordPresence(status: AudioStatus): void {
 }
 
 export async function initEvents() {
+    setupResizableSidebar();
+    setupHomeCarouselControls();
+    setupAppGuide();
     document.querySelector<HTMLButtonElement>("#minimize-window-btn")?.addEventListener("click", () => {
         void api.minimizeWindow().catch((error) => {
             console.error("Не удалось свернуть окно:", error);
@@ -90,6 +96,28 @@ export async function initEvents() {
             showToast("Не удалось изменить размер окна", true);
         });
     });
+    const compactSidebarLayout = window.matchMedia("(max-width: 1100px) and (min-width: 651px)");
+    const updateSidebarToggle = () => {
+        const isExpanded = compactSidebarLayout.matches
+            ? document.body.classList.contains("sidebar-expanded")
+            : !document.body.classList.contains("sidebar-collapsed");
+        const label = isExpanded ? "Свернуть панель навигации" : "Развернуть панель навигации";
+        sidebarElements.toggleSidebarBtn.setAttribute("aria-expanded", String(isExpanded));
+        sidebarElements.toggleSidebarBtn.setAttribute("aria-label", label);
+        sidebarElements.toggleSidebarBtn.title = label;
+    };
+    sidebarElements.toggleSidebarBtn.addEventListener("click", () => {
+        if (compactSidebarLayout.matches) {
+            document.body.classList.remove("sidebar-collapsed");
+            document.body.classList.toggle("sidebar-expanded");
+        } else {
+            document.body.classList.remove("sidebar-expanded");
+            document.body.classList.toggle("sidebar-collapsed");
+        }
+        updateSidebarToggle();
+    });
+    compactSidebarLayout.addEventListener("change", updateSidebarToggle);
+    updateSidebarToggle();
     document.querySelector<HTMLButtonElement>("#close-window-btn")?.addEventListener("click", () => {
         void api.closeWindow().catch((error) => {
             console.error("Не удалось закрыть окно:", error);
@@ -333,6 +361,9 @@ export async function initEvents() {
     playlistsElements.closeModalBtn?.addEventListener("click", () => {
         closeModal(playlistsElements.createPlaylistModal);
         resetPlaylistFormState();
+    });
+    playlistsElements.playlistCoverPickerBtn?.addEventListener("click", () => {
+        void choosePlaylistCover();
     });
 
     // Плейлист 

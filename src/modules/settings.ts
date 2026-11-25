@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { player } from "../core/player";
 import { closeModal, switchView } from "../core/views";
+import { emit } from "@tauri-apps/api/event";
 import { elements as dataElements } from "../elements/data";
 import { elements as playerbarElements } from "../elements/playerbar";
 import { elements } from "../elements/settings";
@@ -166,6 +167,9 @@ function applyTheme(theme: string): void {
     document.documentElement.classList.add(theme);
     elements.themeRadios.forEach((radio) => {
         radio.checked = radio.value === theme;
+    });
+    void emit("theme-changed", theme).catch((error) => {
+        console.error("Не удалось синхронизировать тему с миниплеером:", error);
     });
 }
 
